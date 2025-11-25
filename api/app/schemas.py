@@ -48,15 +48,6 @@ class ItemOut(BaseModel):
     data: dict
     created_at: datetime
 
-class CommentCreate(BaseModel):
-    body: str
-
-class CommentOut(BaseModel):
-    id: str
-    item_id: str
-    body: str
-    created_at: datetime
-
 class ItemsPage(BaseModel):
     items: List[ItemOut]
     next: Optional[str]

@@ -12,8 +12,6 @@ from schemas import (
     ItemCreate,
     ItemOut,
     ItemsPage,
-    CommentCreate,
-    CommentOut,
     AdminUser,
     CreateAdmin,
     SectionCreate,
@@ -161,30 +159,12 @@ async def create_account(body: AccountCreate, user_id: str = Depends(current_use
         EXECUTE format('ALTER TABLE %I.items ALTER COLUMN section_slug SET DEFAULT ''default''', sch);
         EXECUTE format('ALTER TABLE %I.items ALTER COLUMN section_slug SET NOT NULL', sch);
         EXECUTE format('ALTER TABLE %I.items ENABLE ROW LEVEL SECURITY', sch);
-        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.comments (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          item_id UUID NOT NULL REFERENCES %I.items(id) ON DELETE CASCADE,
-          body TEXT NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )', sch, sch);
-        EXECUTE format('CREATE INDEX IF NOT EXISTS comments_item_id_idx ON %I.comments(item_id)', sch);
-        EXECUTE format('ALTER TABLE %I.comments ENABLE ROW LEVEL SECURITY', sch);
         IF NOT EXISTS (
           SELECT 1 FROM pg_policies
           WHERE schemaname = sch AND tablename = 'items' AND policyname = 'items_tenant_policy'
         ) THEN
           EXECUTE format(
             'CREATE POLICY items_tenant_policy ON %I.items
-             USING ( current_setting(''app.current_account'')::uuid = ''{account_id}'' )
-             WITH CHECK ( current_setting(''app.current_account'')::uuid = ''{account_id}'' )',
-            sch);
-        END IF;
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_policies
-          WHERE schemaname = sch AND tablename = 'comments' AND policyname = 'comments_tenant_policy'
-        ) THEN
-          EXECUTE format(
-            'CREATE POLICY comments_tenant_policy ON %I.comments
              USING ( current_setting(''app.current_account'')::uuid = ''{account_id}'' )
              WITH CHECK ( current_setting(''app.current_account'')::uuid = ''{account_id}'' )',
             sch);
@@ -328,23 +308,6 @@ async def delete_item(account_id: str, item_id: str, user_id: str = Depends(curr
   rls.delete_item(account_id, item_id)
   return {"ok": True}
 
-@app.get("/api/accounts/{account_id}/items/{item_id}/comments", response_model=list[CommentOut], dependencies=[Depends(ip_allowlist)])
-async def list_item_comments(account_id: str, item_id: str, user_id: str = Depends(current_user)):
-  item = rls.get_item(account_id, item_id)
-  if not item:
-    raise HTTPException(status_code=404, detail="Item not found")
-  return rls.list_comments(account_id, item_id)
-
-@app.post("/api/accounts/{account_id}/items/{item_id}/comments", response_model=CommentOut, status_code=201, dependencies=[Depends(ip_allowlist)])
-async def create_item_comment(account_id: str, item_id: str, body: CommentCreate, user_id: str = Depends(current_user)):
-  item = rls.get_item(account_id, item_id)
-  if not item:
-    raise HTTPException(status_code=404, detail="Item not found")
-  content = (body.body or "").strip()
-  if not content:
-    raise HTTPException(status_code=400, detail="Comment cannot be empty")
-  return rls.add_comment(account_id, item_id, content)
-
 @app.get("/api/accounts/{account_id}/sections/{slug}/items", response_model=ItemsPage, dependencies=[Depends(ip_allowlist)])
 async def list_section_items(account_id: str, slug: str, limit: int = Query(50, ge=1, le=200), cursor: Optional[str] = None, user_id: str = Depends(current_user)):
   items = rls.list_items(account_id, section=slug, limit=limit, cursor=cursor)
@@ -354,23 +317,6 @@ async def list_section_items(account_id: str, slug: str, limit: int = Query(50, 
 @app.post("/api/accounts/{account_id}/sections/{slug}/items", response_model=ItemOut, dependencies=[Depends(ip_allowlist)])
 async def create_section_item(account_id: str, slug: str, body: ItemCreate, user_id: str = Depends(current_user)):
   return rls.create_item(account_id, section=slug, name=body.name, data=body.data)
-
-@app.get("/api/accounts/{account_id}/sections/{slug}/items/{item_id}/comments", response_model=list[CommentOut], dependencies=[Depends(ip_allowlist)])
-async def list_item_comments_in_section(account_id: str, slug: str, item_id: str, user_id: str = Depends(current_user)):
-  item = rls.get_item(account_id, item_id, expected_section=slug)
-  if not item:
-    raise HTTPException(status_code=404, detail="Item not found")
-  return rls.list_comments(account_id, item_id)
-
-@app.post("/api/accounts/{account_id}/sections/{slug}/items/{item_id}/comments", response_model=CommentOut, status_code=201, dependencies=[Depends(ip_allowlist)])
-async def create_item_comment_in_section(account_id: str, slug: str, item_id: str, body: CommentCreate, user_id: str = Depends(current_user)):
-  item = rls.get_item(account_id, item_id, expected_section=slug)
-  if not item:
-    raise HTTPException(status_code=404, detail="Item not found")
-  content = (body.body or "").strip()
-  if not content:
-    raise HTTPException(status_code=400, detail="Comment cannot be empty")
-  return rls.add_comment(account_id, item_id, content)
 
 # --- Admin API ---
 
