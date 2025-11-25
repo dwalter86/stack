@@ -1,0 +1,70 @@
+<!doctype html><html><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Section</title>
+  <link rel="stylesheet" href="/app.css">
+</head><body>
+  <header id="site-header"></header>
+  <main class="container">
+    <div class="account-header">
+      <div class="account-header-main">
+        <a class="btn" href="#" id="backLink">Back</a>
+        <div>
+          <h1 id="sectionTitle">Section</h1>
+          <p class="small" id="sectionMeta"></p>
+        </div>
+      </div>
+      <div class="account-header-actions">
+        <button id="sectionMenuButton" class="icon-btn" aria-haspopup="true" aria-expanded="false" aria-label="Section actions">⋯</button>
+        <div id="sectionMenu" class="dropdown-menu">
+          <button type="button" data-action="edit" id="editSectionMenuLabel">Edit section</button>
+          <button type="button" data-action="add-item" id="addItemMenuLabel">Add item</button>
+          <button type="button" data-action="delete" class="danger" id="deleteSectionMenuLabel">Delete section</button>
+        </div>
+      </div>
+    </div>
+
+    <section class="card">
+      <div class="actions" style="margin-top:0;margin-bottom:8px;justify-content:space-between;">
+        <h2 style="margin:0;" id="itemsHeading">Items</h2>
+        <button id="addItemButton" class="btn">Add item</button>
+      </div>
+      <div id="itemsEmptyState" class="empty-state hidden">
+        <p class="small" id="itemsEmptyCopy">No items in this section yet.</p>
+        <button id="emptyAddItemButton" class="btn">Add your first item</button>
+      </div>
+      <div id="itemsTableContainer" class="table-wrapper"></div>
+    </section>
+
+    <!-- Modal for creating an item -->
+    <div id="itemModal" class="modal-backdrop hidden">
+      <div class="modal">
+        <h2 id="itemModalTitle">Add item</h2>
+        <form id="itemForm">
+          <p><label>Name<input type="text" id="itemName" required></label></p>
+
+          <div id="schemaFieldsContainer" class="schema-fields hidden"></div>
+
+          <div id="kvEditorContainer" class="kv-editor hidden">
+            <p class="small">Define key/value pairs for this item's data.</p>
+            <div class="table-wrapper">
+              <table class="kv-table">
+                <thead><tr><th>Key</th><th>Value</th><th></th></tr></thead>
+                <tbody id="kvRows"></tbody>
+              </table>
+            </div>
+            <div class="actions" style="justify-content:flex-start;margin-top:8px;">
+              <button type="button" id="addKVRowBtn" class="btn small">Add row</button>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn" id="itemCancel">Cancel</button>
+            <button type="submit" class="btn primary">Save</button>
+          </div>
+        </form>
+        <p id="itemMsg" class="small"></p>
+      </div>
+    </div>
+  </main>
+  <script type="module" src="/js/section.js"></script>
+</body></html>

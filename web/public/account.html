@@ -1,0 +1,51 @@
+<!doctype html><html><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Account</title>
+  <link rel="stylesheet" href="/app.css">
+</head><body>
+  <header id="site-header"></header>
+  <main class="container">
+    <div class="account-header">
+      <div class="account-header-main">
+        <a class="btn" href="/accounts.html">Back</a>
+        <div>
+          <h1 id="acctName">Account</h1>
+        </div>
+      </div>
+      <div class="account-header-actions">
+        <button id="accountMenuButton" class="icon-btn" aria-haspopup="true" aria-expanded="false" aria-label="Account actions">⋯</button>
+        <div id="accountMenu" class="dropdown-menu">
+          <button type="button" data-action="edit">Edit account</button>
+          <button type="button" data-action="add-section">Add section</button>
+          <button type="button" data-action="delete" class="danger">Delete account</button>
+        </div>
+      </div>
+    </div>
+
+    <section>
+      <h2 id="sectionsHeading">Sections</h2>
+      <div id="sectionList"></div>
+      <div id="emptyState" class="empty-state hidden">
+        <p class="small" id="sectionsEmptyCopy">No sections have been created for this account yet.</p>
+        <button id="emptyCreateSectionBtn" class="btn">Create a section</button>
+      </div>
+    </section>
+
+    <!-- Modal for creating a section -->
+    <div id="sectionModal" class="modal-backdrop hidden">
+      <div class="modal">
+        <h2>Create section</h2>
+        <form id="sectionForm">
+          <p><label>Slug (no spaces)<input type="text" id="sectionSlug" required></label></p>
+          <p><label id="sectionLabelPrompt">Label (display name)<input type="text" id="sectionLabel" required></label></p>
+          <div class="modal-actions">
+            <button type="button" class="btn" id="sectionCancel">Cancel</button>
+            <button type="submit" class="btn primary">Save</button>
+          </div>
+        </form>
+        <p id="sectionMsg" class="small"></p>
+      </div>
+    </div>
+  </main>
+  <script type="module" src="/js/account.js"></script>
+</body></html>

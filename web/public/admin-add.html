@@ -1,0 +1,32 @@
+<!doctype html><html><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Add user</title>
+  <link rel="stylesheet" href="/app.css">
+</head><body>
+  <header id="site-header"></header>
+  <main class="container">
+    <h1>Add user</h1>
+    <p class="small">Create a new platform user, choose their role, and assign the accounts they can access.</p>
+    <form id="addForm" class="card" style="padding:16px;">
+      <p><label>Full name<input type="text" id="name" placeholder="Name" required></label></p>
+      <p><label>Email<input type="email" id="email" placeholder="Email" required></label></p>
+      <p><label>Password<input type="password" id="password" placeholder="Password" required></label></p>
+      <p><label>User type
+        <select id="userType">
+          <option value="super_admin">Super admin</option>
+          <option value="admin">Admin</option>
+          <option value="standard">Standard user</option>
+        </select>
+      </label></p>
+      <h3>Grant access to accounts</h3>
+      <p><label><input type="checkbox" id="selectAll"> Select all</label></p>
+      <div id="acctGrid" class="checkbox-grid"></div>
+      <p class="small">If none are selected, the user will be created without memberships.</p>
+      <p class="small">Admins and super admins inherit your customisation settings when you create them.</p>
+      <p><button type="submit" class="btn primary">Create user</button></p>
+      <p id="msg" class="small"></p>
+    </form>
+    <p><a class="btn" href="/admin.html">Back to users</a></p>
+  </main>
+  <script type="module" src="/js/admin_add.js"></script>
+</body></html>

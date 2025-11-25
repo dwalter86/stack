@@ -1,0 +1,34 @@
+<!doctype html><html><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Item</title>
+  <link rel="stylesheet" href="/app.css">
+</head><body>
+  <header id="site-header"></header>
+  <main class="container">
+    <div class="account-header">
+      <div class="account-header-main">
+        <a class="btn" href="#" id="backToSection">Back</a>
+        <div>
+          <h1 id="itemName">Item</h1>
+          <p class="small" id="itemMeta"></p>
+        </div>
+      </div>
+    </div>
+
+    <section class="card">
+      <div class="table-wrapper">
+        <table class="properties-table">
+          <tbody id="itemProperties"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <details>
+        <summary class="small">Raw JSON</summary>
+        <pre id="itemRaw"></pre>
+      </details>
+    </section>
+  </main>
+  <script type="module" src="/js/item.js"></script>
+</body></html>

@@ -1,0 +1,168 @@
+:root { --fg:#222; --muted:#666; --bg:#fafafa; --card:#fff; --border:#e5e5e5; }
+* { box-sizing: border-box; }
+body { margin:0; font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Arial,"Apple Color Emoji","Segoe UI Emoji"; color:var(--fg); background:var(--bg); }
+header, footer { background:var(--card); border-bottom:1px solid var(--border); }
+footer { border-top:1px solid var(--border); border-bottom:none; color:var(--muted); }
+.container { max-width:960px; margin:0 auto; padding:16px; }
+.brand { font-weight:600; }
+.menu { display:flex; gap:8px; align-items:center; }
+.menu a, .btn { text-decoration:none; color:var(--fg); border:1px solid var(--border); padding:6px 10px; border-radius:6px; background:#fff; cursor:pointer; }
+.menu .pill { border:none; color:var(--muted); }
+main.container { padding-top:24px; padding-bottom:24px; background:var(--card); border:1px solid var(--border); border-radius:10px; margin-top:16px; }
+table { width:100%; border-collapse:collapse; }
+th, td { padding:8px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
+.actions { display:flex; justify-content:flex-end; margin:8px 0; gap:8px; }
+.checkbox-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap:8px; }
+.small { color:var(--muted); font-size:.9em; }
+input, textarea, select { width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; }
+label { display:block; }
+.card { border:1px solid var(--border); border-radius:8px; padding:12px; background:#fff; }
+.stacked-list { display:flex; flex-direction:column; gap:12px; margin-top:12px; }
+.account-card { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.account-card strong { font-size:1.05em; }
+pre { background:#f4f4f4; padding:8px; border-radius:6px; overflow:auto; }
+
+/* Account/Section header + 3-dot menu */
+.account-header {
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  margin-bottom:12px;
+}
+.account-header-main {
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+}
+.account-header-main h1 {
+  margin:0;
+}
+.account-header-actions {
+  position:relative;
+}
+.icon-btn {
+  border:none;
+  background:transparent;
+  padding:4px 8px;
+  cursor:pointer;
+  border-radius:999px;
+  font-size:20px;
+  line-height:1;
+}
+.icon-btn:hover {
+  background:rgba(0,0,0,0.05);
+}
+
+.dropdown-menu {
+  position:absolute;
+  right:0;
+  top:100%;
+  margin-top:4px;
+  min-width:180px;
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:4px 0;
+  box-shadow:0 10px 30px rgba(0,0,0,0.12);
+  z-index:20;
+  display:none;
+}
+.dropdown-menu.open { display:block; }
+.dropdown-menu button {
+  width:100%;
+  border:none;
+  background:transparent;
+  text-align:left;
+  padding:8px 12px;
+  font:inherit;
+  cursor:pointer;
+}
+.dropdown-menu button:hover {
+  background:#f5f5f5;
+}
+.dropdown-menu .danger {
+  color:#b00020;
+}
+
+/* Modal */
+.modal-backdrop {
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.35);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:30;
+}
+.modal {
+  background:#fff;
+  border-radius:10px;
+  max-width:480px;
+  width:100%;
+  padding:16px;
+  box-shadow:0 16px 40px rgba(0,0,0,0.18);
+}
+.modal h2 { margin-top:0; }
+.modal-actions {
+  margin-top:12px;
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+}
+.btn.primary {
+  background:#222;
+  color:#fff;
+}
+.btn.primary:hover {
+  filter:brightness(0.95);
+}
+.btn.small {
+  font-size:.85em;
+  padding:4px 8px;
+}
+.hidden { display:none !important; }
+
+.empty-state {
+  margin-top:16px;
+  text-align:center;
+}
+.empty-state p { margin-bottom:12px; }
+
+/* Item table */
+.table-wrapper {
+  overflow-x:auto;
+}
+.tag {
+  display:inline-block;
+  padding:2px 6px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  font-size:.75rem;
+  color:var(--muted);
+}
+
+/* Vertical properties table */
+.properties-table th {
+  width:30%;
+  color:var(--muted);
+  font-weight:500;
+}
+.properties-table td {
+  word-break:break-word;
+}
+
+/* Key/value editor */
+.kv-table input {
+  width:100%;
+}
+.kv-remove-btn {
+  border:none;
+  background:transparent;
+  cursor:pointer;
+  font-size:18px;
+  line-height:1;
+}
+.kv-remove-btn:hover {
+  color:#b00020;
+}

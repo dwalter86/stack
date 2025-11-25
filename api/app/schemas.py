@@ -1,0 +1,81 @@
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, List, Literal
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class Preferences(BaseModel):
+    accounts_label: str = "Home"
+    sections_label: str = "Sections"
+    items_label: str = "Items"
+
+class PreferencesUpdate(BaseModel):
+    accounts_label: Optional[str] = None
+    sections_label: Optional[str] = None
+    items_label: Optional[str] = None
+
+class MeOut(BaseModel):
+    id: str
+    email: EmailStr
+    name: str
+    user_type: str
+    is_admin: bool
+    preferences: Preferences = Preferences()
+
+class AccountOut(BaseModel):
+    id: str
+    name: str
+
+class AccountCreate(BaseModel):
+    name: str
+
+class AccountUpdate(BaseModel):
+    name: str
+
+class ItemCreate(BaseModel):
+    name: str
+    data: dict = Field(default_factory=dict)
+
+class ItemOut(BaseModel):
+    id: str
+    name: str
+    data: dict
+
+class ItemsPage(BaseModel):
+    items: List[ItemOut]
+    next: Optional[str]
+
+class AdminUser(BaseModel):
+    id: str
+    email: EmailStr
+    name: str
+    user_type: str
+    is_active: bool
+    preferences: Optional[Preferences] = None
+
+class CreateAdmin(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    user_type: Literal["super_admin", "admin", "standard"] = "admin"
+    accounts: List[str] = Field(default_factory=list)
+
+class SectionBase(BaseModel):
+    slug: str
+    label: str
+    schema: dict = Field(default_factory=dict)
+
+class SectionCreate(SectionBase):
+    pass
+
+class SectionUpdate(BaseModel):
+    label: str
+    schema: dict = Field(default_factory=dict)
+
+class SectionOut(SectionBase):
+    id: str

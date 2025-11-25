@@ -1,0 +1,23 @@
+<!doctype html><html><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Customisation</title>
+  <link rel="stylesheet" href="/app.css">
+</head><body>
+  <header id="site-header"></header>
+  <main class="container">
+    <a class="btn" href="/settings.html">← Back to settings</a>
+    <h1>Customisation</h1>
+    <p class="small">Update the labels you see for key parts of the UI. Changes are saved to your user profile.</p>
+    <form id="customisationForm" class="card" style="padding:16px;">
+      <p><label>Accounts label<input type="text" id="accountsLabel" required></label></p>
+      <p><label>Sections label<input type="text" id="sectionsLabel" required></label></p>
+      <p><label>Items label<input type="text" id="itemsLabel" required></label></p>
+      <div class="actions" style="justify-content:flex-start;">
+        <button type="submit" class="btn primary">Save changes</button>
+        <button type="button" class="btn" id="resetDefaults">Reset to defaults</button>
+      </div>
+      <p id="customisationMsg" class="small"></p>
+    </form>
+  </main>
+  <script type="module" src="/js/customisation.js"></script>
+</body></html>

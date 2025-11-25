@@ -1,0 +1,28 @@
+<!doctype html><html><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accounts</title>
+  <link rel="stylesheet" href="/app.css">
+</head><body>
+  <header id="site-header"></header>
+  <main class="container">
+    <div class="account-header">
+      <div class="account-header-main">
+        <h1 id="accountsHeading">Your Accounts</h1>
+      </div>
+      <div class="account-header-actions">
+        <button id="accountsMenuButton" class="icon-btn" aria-haspopup="true" aria-expanded="false" aria-label="Account actions">⋯</button>
+        <div id="accountsMenu" class="dropdown-menu">
+          <button type="button" data-action="add-account" id="addAccountBtnLabel">Add account</button>
+        </div>
+      </div>
+    </div>
+
+    <section>
+      <div id="accountsEmptyState" class="empty-state hidden">
+        <p class="small" id="accountsEmptyCopy">You do not belong to any accounts yet.</p>
+      </div>
+      <div id="accountList" class="stacked-list"></div>
+    </section>
+  </main>
+  <script type="module" src="/js/api.js"></script>
+</body></html>
