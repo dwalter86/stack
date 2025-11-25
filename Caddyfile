@@ -1,5 +1,8 @@
 :80 {
-  handle /api* {
+  handle /api-explorer* {
+    reverse_proxy http://web:80
+  }
+  handle /api/* {
     reverse_proxy http://api:8000
   }
   handle {
