@@ -24,6 +24,15 @@ function formatValue(val){
   return escapeHtml(String(val));
 }
 
+function formatDateTime(val){
+  if(!val) return '';
+  try {
+    return new Date(val).toLocaleString();
+  } catch {
+    return String(val);
+  }
+}
+
 (async () => {
   const me = await loadMeOrRedirect(); if(!me) return;
   renderShell(me);
@@ -79,7 +88,8 @@ function formatValue(val){
     const item = await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`);
     itemNameEl.textContent = item.name;
     const sectionLabel = section ? section.label : (sectionSlug || 'No section');
-    itemMetaEl.textContent = `${accountName} · ${labels.sections_label}: ${sectionLabel} · id: ${itemId}`;
+    const createdCopy = item.created_at ? ` · Added ${formatDateTime(item.created_at)}` : '';
+    itemMetaEl.textContent = `${accountName} · ${labels.sections_label}: ${sectionLabel} · id: ${itemId}${createdCopy}`;
     document.title = `${item.name} | ${labels.items_label}`;
 
     const data = item.data || {};

@@ -36,6 +36,66 @@ function parseLooseValue(str){
   }
 }
 
+function formatDateTime(val){
+  if(!val) return '';
+  try {
+    return new Date(val).toLocaleString();
+  } catch {
+    return String(val);
+  }
+}
+
+function columnPrefKey(accountId, slug){
+  return `columnPrefs:${accountId}:${slug||'default'}`;
+}
+
+function loadColumnPrefs(accountId, slug){
+  try {
+    const raw = localStorage.getItem(columnPrefKey(accountId, slug));
+    if(!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function reconcileVisibility(columns, stored){
+  const available = new Set(columns.map(c => c.key));
+  const result = [];
+  for(const key of stored){
+    if(available.has(key) && !result.includes(key)) result.push(key);
+  }
+  for(const col of columns){
+    if(col.locked && !result.includes(col.key)) result.unshift(col.key);
+  }
+  if(!result.length){
+    return columns.map(c => c.key);
+  }
+  return result;
+}
+
+function getAutoKeys(items){
+  const keySet = new Set();
+  for(const it of items){
+    if(it.data && typeof it.data === 'object'){
+      Object.keys(it.data).forEach(k => keySet.add(k));
+    }
+  }
+  let keys = Array.from(keySet);
+  const priority = ['title','name','label'];
+  keys.sort((a,b) => {
+    const ia = priority.indexOf(a.toLowerCase());
+    const ib = priority.indexOf(b.toLowerCase());
+    if(ia !== -1 && ib === -1) return -1;
+    if(ib !== -1 && ia === -1) return 1;
+    return a.localeCompare(b);
+  });
+  const MAX_COLS = 8;
+  if(keys.length > MAX_COLS) keys = keys.slice(0, MAX_COLS);
+  return keys;
+}
+
 (async () => {
   const me = await loadMeOrRedirect(); if(!me) return;
   renderShell(me);
@@ -53,8 +113,6 @@ function parseLooseValue(str){
   const metaEl = document.getElementById('sectionMeta');
   const itemsEmptyState = document.getElementById('itemsEmptyState');
   const itemsTableContainer = document.getElementById('itemsTableContainer');
-  const addItemButton = document.getElementById('addItemButton');
-  const emptyAddItemButton = document.getElementById('emptyAddItemButton');
   const itemsHeading = document.getElementById('itemsHeading');
   const itemsEmptyCopy = document.getElementById('itemsEmptyCopy');
   const itemModalTitle = document.getElementById('itemModalTitle');
@@ -62,6 +120,7 @@ function parseLooseValue(str){
   const menuButton = document.getElementById('sectionMenuButton');
   const menu = document.getElementById('sectionMenu');
   const editSectionMenuLabel = document.getElementById('editSectionMenuLabel');
+  const itemSettingsMenuLabel = document.getElementById('itemSettingsMenuLabel');
   const addItemMenuLabel = document.getElementById('addItemMenuLabel');
   const deleteSectionMenuLabel = document.getElementById('deleteSectionMenuLabel');
 
@@ -76,10 +135,9 @@ function parseLooseValue(str){
   const addKVRowBtn = document.getElementById('addKVRowBtn');
 
   if(itemsHeading){ itemsHeading.textContent = labels.items_label; }
-  if(addItemButton){ addItemButton.textContent = `Add ${labels.items_label}`; }
-  if(emptyAddItemButton){ emptyAddItemButton.textContent = `Add your first ${labels.items_label.toLowerCase()}`; }
-  if(itemsEmptyCopy){ itemsEmptyCopy.textContent = `No ${labels.items_label.toLowerCase()} in this ${labels.sections_label.toLowerCase()} yet.`; }
+  if(itemsEmptyCopy){ itemsEmptyCopy.textContent = `No ${labels.items_label.toLowerCase()} in this ${labels.sections_label.toLowerCase()} yet. Use the menu to add one.`; }
   if(editSectionMenuLabel){ editSectionMenuLabel.textContent = `Edit ${labels.sections_label}`; }
+  if(itemSettingsMenuLabel){ itemSettingsMenuLabel.textContent = 'Settings'; }
   if(addItemMenuLabel){ addItemMenuLabel.textContent = `Add ${labels.items_label}`; }
   if(deleteSectionMenuLabel){ deleteSectionMenuLabel.textContent = `Delete ${labels.sections_label}`; }
   if(itemModalTitle){ itemModalTitle.textContent = `Add ${labels.items_label}`; }
@@ -99,6 +157,10 @@ function parseLooseValue(str){
 
   let currentSection = null;
   let schemaFields = []; // section.schema.fields || []
+  let itemsData = [];
+  let columnDefs = [];
+  let visibleColumns = [];
+  let sortState = { key: 'created_at', direction: 'desc' };
 
   async function loadSectionMeta(){
     try {
@@ -207,19 +269,6 @@ function parseLooseValue(str){
     });
   }
 
-  if(addItemButton){
-    addItemButton.addEventListener('click', (e) => {
-      e.preventDefault();
-      openItemModal();
-    });
-  }
-  if(emptyAddItemButton){
-    emptyAddItemButton.addEventListener('click', (e) => {
-      e.preventDefault();
-      openItemModal();
-    });
-  }
-
   if(itemCancel){
     itemCancel.addEventListener('click', (e) => {
       e.preventDefault();
@@ -227,89 +276,129 @@ function parseLooseValue(str){
     });
   }
 
+  function buildColumnDefs(items){
+    const cols = [
+      { key: 'name', label: 'Name', locked: true },
+      { key: 'created_at', label: 'Date added', type: 'date' },
+    ];
+    if(schemaFields && schemaFields.length){
+      const visibleFields = schemaFields.filter(f => f.showInTable !== false);
+      visibleFields.forEach(f => cols.push({ key: f.key, label: f.label || f.key }));
+    } else {
+      const autoKeys = getAutoKeys(items);
+      autoKeys.forEach(k => cols.push({ key: k, label: k }));
+    }
+    return cols;
+  }
+
+  function sortItems(list){
+    const dir = sortState.direction === 'asc' ? 1 : -1;
+    const key = sortState.key;
+    return [...list].sort((a, b) => {
+      let va;
+      let vb;
+      if(key === 'name'){
+        va = a.name || '';
+        vb = b.name || '';
+      } else if(key === 'created_at') {
+        va = a.created_at ? new Date(a.created_at).getTime() : 0;
+        vb = b.created_at ? new Date(b.created_at).getTime() : 0;
+      } else {
+        const rawA = a.data && typeof a.data === 'object' ? a.data[key] : undefined;
+        const rawB = b.data && typeof b.data === 'object' ? b.data[key] : undefined;
+        va = rawA;
+        vb = rawB;
+      }  
+
+      if(typeof va === 'number' && typeof vb === 'number'){
+        return (va - vb) * dir;
+      }
+      const strA = va === null || va === undefined ? '' : String(va);
+      const strB = vb === null || vb === undefined ? '' : String(vb);
+      return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' }) * dir;
+    });
+  }
+
+  function renderSortIndicator(col){
+    if(sortState.key !== col.key){
+      return '<span class="sort-arrow" aria-hidden="true">↕</span>';
+    }
+    const arrow = sortState.direction === 'asc' ? '↑ asc' : '↓ dsc';
+    return `<span class="sort-arrow active" aria-hidden="true">${arrow}</span>`;
+  }
+
+  function renderItemsTable(){
+    const visibleSet = new Set(visibleColumns);
+    const activeColumns = columnDefs.filter(c => visibleSet.has(c.key));
+    if(!itemsData.length){
+      itemsTableContainer.innerHTML = '';
+      return;
+    }
+    
+    const headerCells = activeColumns.map(col => {
+      const ariaSort = sortState.key === col.key ? (sortState.direction === 'asc' ? 'ascending' : 'descending') : 'none';
+      return `<th><button type="button" class="sort-toggle" data-key="${escapeHtml(col.key)}" aria-sort="${ariaSort}">${escapeHtml(col.label)} ${renderSortIndicator(col)}</button></th>`;
+    }).join('');
+
+    const sortedItems = sortItems(itemsData);
+    const rowsHtml = sortedItems.map(it => {
+      const cells = [];
+      for(const col of activeColumns){
+        if(col.key === 'name'){
+          cells.push(`<td>${escapeHtml(it.name)}</td>`);
+        } else if(col.key === 'created_at'){
+          cells.push(`<td>${escapeHtml(formatDateTime(it.created_at))}</td>`);
+        } else {
+          const val = it.data && typeof it.data === 'object' ? it.data[col.key] : undefined;
+          cells.push(`<td>${formatCellValue(val)}</td>`);
+        }
+      }
+      const viewHref = `/item.html?account=${encodeURIComponent(accountId)}&section=${encodeURIComponent(slug)}&item=${encodeURIComponent(it.id)}`;
+      cells.push(`<td style="width:1%;white-space:nowrap;"><a class="btn small" href="${viewHref}">View</a></td>`);
+      return `<tr>${cells.join('')}</tr>`;
+    }).join('');
+
+    itemsTableContainer.innerHTML = `<div class="table-wrapper"><table><thead><tr>${headerCells}<th></th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+    const headerButtons = itemsTableContainer.querySelectorAll('.sort-toggle');
+    headerButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-key');
+        if(!key) return;
+        if(sortState.key === key){
+          sortState = { key, direction: sortState.direction === 'asc' ? 'desc' : 'asc' };
+        } else {
+          sortState = { key, direction: key === 'created_at' ? 'desc' : 'asc' };
+        }
+        renderItemsTable();
+      });
+    });
+  }
+
   async function loadItems(){
     try{
       const page = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}/items?limit=200`);
-      const items = page.items || [];
-      if(!items.length){
+      itemsData = page.items || [];
+      columnDefs = buildColumnDefs(itemsData);
+      const stored = loadColumnPrefs(accountId, slug);
+      const base = stored.length ? [...stored, ...columnDefs.map(c => c.key)] : columnDefs.map(c => c.key);
+      visibleColumns = reconcileVisibility(columnDefs, base);
+      const visibleSet = new Set(visibleColumns);
+      if(!visibleSet.has(sortState.key)){
+        const fallbackKey = visibleColumns[0] || 'created_at';
+        sortState = { key: fallbackKey, direction: fallbackKey === 'created_at' ? 'desc' : 'asc' };
+      }
+
+      if(!itemsData.length){
         itemsEmptyState.classList.remove('hidden');
         itemsTableContainer.innerHTML = '';
         return;
       }
       itemsEmptyState.classList.add('hidden');
-      const html = renderItemsTable(items);
-      itemsTableContainer.innerHTML = html;
+      renderItemsTable();
     }catch(e){
       itemsTableContainer.innerHTML = `<p class="small">Failed to load items: ${e.message}</p>`;
       itemsEmptyState.classList.add('hidden');
     }
-  }
-
-  function renderItemsTable(items){
-    const hasSchema = schemaFields && schemaFields.length;
-    if(hasSchema){
-      return renderSchemaTable(items, schemaFields);
-    }
-    return renderAutoTable(items);
-  }
-
-  function renderSchemaTable(items, fields){
-    const visibleFields = fields.filter(f => f.showInTable !== false);
-    const headers = ['Name', ...visibleFields.map(f => f.label || f.key), ''];
-    const headerHtml = '<tr>' + headers.map(h => `<th>${escapeHtml(h)}</th>`).join('') + '</tr>';
-    const rowsHtml = items.map(it => {
-      const cells = [];
-      cells.push(`<td>${escapeHtml(it.name)}</td>`);
-      for(const f of visibleFields){
-        const key = f.key;
-        const val = it.data && typeof it.data === 'object' ? it.data[key] : undefined;
-        cells.push(`<td>${formatCellValue(val)}</td>`);
-      }
-      const viewHref = `/item.html?account=${encodeURIComponent(accountId)}&section=${encodeURIComponent(slug)}&item=${encodeURIComponent(it.id)}`;
-      cells.push(`<td style="width:1%;white-space:nowrap;"><a class="btn small" href="${viewHref}">View</a></td>`);
-      return `<tr>${cells.join('')}</tr>`;
-    }).join('');
-
-    return `<div class="table-wrapper"><table><thead>${headerHtml}</thead><tbody>${rowsHtml}</tbody></table></div>`;
-  }
-
-  function renderAutoTable(items){
-    const keySet = new Set();
-    for(const it of items){
-      if(it.data && typeof it.data === 'object'){
-        Object.keys(it.data).forEach(k => keySet.add(k));
-      }
-    }
-    let keys = Array.from(keySet);
-    // Optional: move common keys to front
-    const priority = ['title','name','label'];
-    keys.sort((a,b) => {
-      const ia = priority.indexOf(a.toLowerCase());
-      const ib = priority.indexOf(b.toLowerCase());
-      if(ia !== -1 && ib === -1) return -1;
-      if(ib !== -1 && ia === -1) return 1;
-      return a.localeCompare(b);
-    });
-    // Limit columns to avoid over-wide tables
-    const MAX_COLS = 8;
-    if(keys.length > MAX_COLS) keys = keys.slice(0, MAX_COLS);
-
-    const headers = ['Name', ...keys, ''];
-    const headerHtml = '<tr>' + headers.map(h => `<th>${escapeHtml(h)}</th>`).join('') + '</tr>';
-
-    const rowsHtml = items.map(it => {
-      const cells = [];
-      cells.push(`<td>${escapeHtml(it.name)}</td>`);
-      for(const k of keys){
-        const val = it.data && typeof it.data === 'object' ? it.data[k] : undefined;
-        cells.push(`<td>${formatCellValue(val)}</td>`);
-      }
-      const viewHref = `/item.html?account=${encodeURIComponent(accountId)}&section=${encodeURIComponent(slug)}&item=${encodeURIComponent(it.id)}`;
-      cells.push(`<td style="width:1%;white-space:nowrap;"><a class="btn small" href="${viewHref}">View</a></td>`);
-      return `<tr>${cells.join('')}</tr>`;
-    }).join('');
-
-    return `<div class="table-wrapper"><table><thead>${headerHtml}</thead><tbody>${rowsHtml}</tbody></table></div>`;
   }
 
   // Item form submit
@@ -369,6 +458,8 @@ function parseLooseValue(str){
 
     if(action === 'add-item'){
       openItemModal();
+    } else if(action === 'settings'){
+      window.location.href = `/item-columns.html?account=${encodeURIComponent(accountId)}&slug=${encodeURIComponent(slug)}`;
     } else if(action === 'edit'){
       const currentLabel = currentSection?.label || slug;
       const next = prompt('Section name', currentLabel);

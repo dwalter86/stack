@@ -17,6 +17,7 @@
         <button id="sectionMenuButton" class="icon-btn" aria-haspopup="true" aria-expanded="false" aria-label="Section actions">⋯</button>
         <div id="sectionMenu" class="dropdown-menu">
           <button type="button" data-action="edit" id="editSectionMenuLabel">Edit section</button>
+          <button type="button" data-action="settings" id="itemSettingsMenuLabel">Settings</button>
           <button type="button" data-action="add-item" id="addItemMenuLabel">Add item</button>
           <button type="button" data-action="delete" class="danger" id="deleteSectionMenuLabel">Delete section</button>
         </div>
@@ -24,13 +25,9 @@
     </div>
 
     <section class="card">
-      <div class="actions" style="margin-top:0;margin-bottom:8px;justify-content:space-between;">
-        <h2 style="margin:0;" id="itemsHeading">Items</h2>
-        <button id="addItemButton" class="btn">Add item</button>
-      </div>
+      <h2 style="margin:0;" id="itemsHeading">Items</h2>
       <div id="itemsEmptyState" class="empty-state hidden">
         <p class="small" id="itemsEmptyCopy">No items in this section yet.</p>
-        <button id="emptyAddItemButton" class="btn">Add your first item</button>
       </div>
       <div id="itemsTableContainer" class="table-wrapper"></div>
     </section>

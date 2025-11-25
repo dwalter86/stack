@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Literal
 
@@ -45,6 +46,7 @@ class ItemOut(BaseModel):
     id: str
     name: str
     data: dict
+    created_at: datetime
 
 class ItemsPage(BaseModel):
     items: List[ItemOut]

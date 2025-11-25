@@ -1,0 +1,28 @@
+<!doctype html><html><head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Item column settings</title>
+    <link rel="stylesheet" href="/app.css">
+  </head><body>
+    <header id="site-header"></header>
+    <main class="container">
+      <div class="account-header">
+        <div class="account-header-main">
+          <a class="btn" href="#" id="backToSection">Back</a>
+          <div>
+            <h1 id="settingsTitle">Column settings</h1>
+            <p class="small" id="settingsMeta"></p>
+          </div>
+        </div>
+      </div>
+  
+      <section class="card">
+        <p class="small">Choose which columns should appear in the items table for this section. Changes do not affect the item detail view.</p>
+        <div id="columnsList" class="stacked-list"></div>
+        <div class="actions" style="justify-content:flex-start;">
+          <button class="btn" id="saveColumnsBtn">Save</button>
+        </div>
+        <p class="small" id="saveMessage"></p>
+      </section>
+    </main>
+    <script type="module" src="/js/item_columns.js"></script>
+  </body></html>

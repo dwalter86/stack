@@ -43,14 +43,15 @@ export function renderShell(user){
   const footer = document.getElementById('site-footer');
   if(header){
     header.innerHTML = `
-      <div class="container" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
-        <div class="brand">ADIGI One Platform</div>
+      <div class="container header-bar">
         <nav class="menu">
-          <span class="pill small">${user?.email||''}</span>
           <a href="/accounts.html">Home</a>
           ${user?.is_admin ? '<a href="/settings.html">Settings</a>' : ''}
-          <a href="#" id="logoutBtn" class="btn">Logout</a>
         </nav>
+        <div class="menu" style="margin-left:auto;">
+          <span class="pill small">${user?.email||''}</span>
+          <a href="#" id="logoutBtn" class="btn">Logout</a>
+        </div>
       </div>`;
     const btn=document.getElementById('logoutBtn'); if(btn) btn.addEventListener('click',(e)=>{e.preventDefault(); logout();});
   }
