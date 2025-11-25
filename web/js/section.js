@@ -45,6 +45,21 @@ function formatDateTime(val){
   }
 }
 
+function normalizeExportValue(val){
+  if(val === null || val === undefined) return '';
+  if(val instanceof Date){
+    return val.toISOString();
+  }
+  if(typeof val === 'object'){
+    try {
+      return JSON.stringify(val);
+    } catch {
+      return String(val);
+    }
+  }
+  return String(val);
+}
+
 function columnPrefKey(accountId, slug){
   return `columnPrefs:${accountId}:${slug||'default'}`;
 }
@@ -116,6 +131,7 @@ function getAutoKeys(items){
   const itemsHeading = document.getElementById('itemsHeading');
   const itemsEmptyCopy = document.getElementById('itemsEmptyCopy');
   const itemModalTitle = document.getElementById('itemModalTitle');
+  const exportBtn = document.getElementById('exportItemsBtn');
 
   const menuButton = document.getElementById('sectionMenuButton');
   const menu = document.getElementById('sectionMenu');
@@ -141,6 +157,7 @@ function getAutoKeys(items){
   if(addItemMenuLabel){ addItemMenuLabel.textContent = `Add ${labels.items_label}`; }
   if(deleteSectionMenuLabel){ deleteSectionMenuLabel.textContent = `Delete ${labels.sections_label}`; }
   if(itemModalTitle){ itemModalTitle.textContent = `Add ${labels.items_label}`; }
+  if(exportBtn){ exportBtn.disabled = true; }
 
   if(backLink){
     backLink.href = `/account.html?id=${encodeURIComponent(accountId)}`;
@@ -276,6 +293,12 @@ function getAutoKeys(items){
     });
   }
 
+  if(exportBtn){
+    exportBtn.addEventListener('click', () => {
+      exportItems();
+    });
+  }
+
   function buildColumnDefs(items){
     const cols = [
       { key: 'name', label: 'Name', locked: true },
@@ -317,6 +340,268 @@ function getAutoKeys(items){
       const strB = vb === null || vb === undefined ? '' : String(vb);
       return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' }) * dir;
     });
+  }
+
+  function buildExportColumns(){
+    const cols = [];
+    const seen = new Set();
+    columnDefs.forEach(col => {
+      if(seen.has(col.key)) return;
+      seen.add(col.key);
+      cols.push({ key: col.key, label: col.label || col.key });
+    });
+
+    const extras = new Set();
+    itemsData.forEach(it => {
+      if(it.data && typeof it.data === 'object'){
+        Object.keys(it.data).forEach(k => {
+          if(!seen.has(k)) extras.add(k);
+        });
+      }
+    });
+
+    Array.from(extras).sort().forEach(k => {
+      seen.add(k);
+      cols.push({ key: k, label: k });
+    });
+
+    return cols;
+  }
+
+  function prepareExportRows(columns){
+    return itemsData.map(it => columns.map(col => {
+      if(col.key === 'name') return normalizeExportValue(it.name);
+      if(col.key === 'created_at'){
+        return it.created_at ? new Date(it.created_at).toISOString() : '';
+      }
+      const val = it.data && typeof it.data === 'object' ? it.data[col.key] : '';
+      return normalizeExportValue(val);
+    }));
+  }
+
+  function escapeXml(str){
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  function columnLetter(idx){
+    let n = idx + 1;
+    let letters = '';
+    while(n > 0){
+      const rem = (n - 1) % 26;
+      letters = String.fromCharCode(65 + rem) + letters;
+      n = Math.floor((n - 1) / 26);
+    }
+    return letters;
+  }
+
+  function buildSheetXml(columns, rows, sheetName){
+    const headerCells = columns.map((col, i) => {
+      const ref = `${columnLetter(i)}1`;
+      return `<c r="${ref}" t="inlineStr"><is><t>${escapeXml(col.label || col.key)}</t></is></c>`;
+    }).join('');
+
+    const bodyRows = rows.map((row, rowIdx) => {
+      const cells = row.map((cell, colIdx) => {
+        const ref = `${columnLetter(colIdx)}${rowIdx + 2}`;
+        return `<c r="${ref}" t="inlineStr"><is><t>${escapeXml(cell)}</t></is></c>`;
+      }).join('');
+      return `<row r="${rowIdx + 2}">${cells}</row>`;
+    }).join('');
+
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+      `<sheetData>` +
+      `<row r="1">${headerCells}</row>` +
+      bodyRows +
+      `</sheetData>` +
+      `</worksheet>`;
+  }
+
+  const CRC_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for(let i = 0; i < 256; i++){
+      let c = i;
+      for(let k = 0; k < 8; k++){
+        c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1));
+      }
+      table[i] = c >>> 0;
+    }
+    return table;
+  })();
+
+  function crc32(bytes){
+    let crc = 0 ^ (-1);
+    for(let i = 0; i < bytes.length; i++){
+      crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ bytes[i]) & 0xFF];
+    }
+    return (crc ^ (-1)) >>> 0;
+  }
+
+  function dateToDos(date){
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    const day = d.getDate();
+    const hours = d.getHours();
+    const minutes = d.getMinutes();
+    const seconds = Math.floor(d.getSeconds() / 2);
+    const dosDate = ((year - 1980) << 9) | (month << 5) | day;
+    const dosTime = (hours << 11) | (minutes << 5) | seconds;
+    return { dosDate, dosTime };
+  }
+
+  function concatUint8(arrays){
+    const total = arrays.reduce((sum, a) => sum + a.length, 0);
+    const out = new Uint8Array(total);
+    let offset = 0;
+    arrays.forEach(a => {
+      out.set(a, offset);
+      offset += a.length;
+    });
+    return out;
+  }
+
+  function createZip(entries){
+    const encoder = new TextEncoder();
+    const files = [];
+    const central = [];
+    let offset = 0;
+
+    entries.forEach(entry => {
+      const nameBytes = encoder.encode(entry.name);
+      const dataBytes = typeof entry.data === 'string' ? encoder.encode(entry.data) : entry.data;
+      const { dosDate, dosTime } = dateToDos(entry.date || new Date());
+      const crc = crc32(dataBytes);
+
+      const localHeader = new Uint8Array(30);
+      const dvLocal = new DataView(localHeader.buffer);
+      dvLocal.setUint32(0, 0x04034b50, true);
+      dvLocal.setUint16(4, 20, true);
+      dvLocal.setUint16(6, 0x0800, true);
+      dvLocal.setUint16(8, 0, true);
+      dvLocal.setUint16(10, dosTime, true);
+      dvLocal.setUint16(12, dosDate, true);
+      dvLocal.setUint32(14, crc, true);
+      dvLocal.setUint32(18, dataBytes.length, true);
+      dvLocal.setUint32(22, dataBytes.length, true);
+      dvLocal.setUint16(26, nameBytes.length, true);
+      dvLocal.setUint16(28, 0, true);
+
+      const fileRecord = concatUint8([localHeader, nameBytes, dataBytes]);
+      files.push(fileRecord);
+
+      const centralHeader = new Uint8Array(46);
+      const dvCentral = new DataView(centralHeader.buffer);
+      dvCentral.setUint32(0, 0x02014b50, true);
+      dvCentral.setUint16(4, 20, true);
+      dvCentral.setUint16(6, 20, true);
+      dvCentral.setUint16(8, 0x0800, true);
+      dvCentral.setUint16(10, 0, true);
+      dvCentral.setUint16(12, dosTime, true);
+      dvCentral.setUint16(14, dosDate, true);
+      dvCentral.setUint32(16, crc, true);
+      dvCentral.setUint32(20, dataBytes.length, true);
+      dvCentral.setUint32(24, dataBytes.length, true);
+      dvCentral.setUint16(28, nameBytes.length, true);
+      dvCentral.setUint16(30, 0, true);
+      dvCentral.setUint16(32, 0, true);
+      dvCentral.setUint16(34, 0, true);
+      dvCentral.setUint16(36, 0, true);
+      dvCentral.setUint32(38, 0, true);
+      dvCentral.setUint32(42, offset, true);
+
+      central.push(concatUint8([centralHeader, nameBytes]));
+      offset += fileRecord.length;
+    });
+
+    const centralDirSize = central.reduce((sum, a) => sum + a.length, 0);
+    const centralDirOffset = offset;
+
+    const endRecord = new Uint8Array(22);
+    const dvEnd = new DataView(endRecord.buffer);
+    dvEnd.setUint32(0, 0x06054b50, true);
+    dvEnd.setUint16(4, 0, true);
+    dvEnd.setUint16(6, 0, true);
+    dvEnd.setUint16(8, entries.length, true);
+    dvEnd.setUint16(10, entries.length, true);
+    dvEnd.setUint32(12, centralDirSize, true);
+    dvEnd.setUint32(16, centralDirOffset, true);
+    dvEnd.setUint16(20, 0, true);
+
+    return concatUint8([...files, ...central, endRecord]);
+  }
+
+  function createXlsx(columns, rows, sheetName){
+    const sheetXml = buildSheetXml(columns, rows, sheetName);
+    const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+      `<sheets><sheet name="${escapeXml(sheetName)}" sheetId="1" r:id="rId1"/></sheets>` +
+      `</workbook>`;
+
+    const workbookRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>` +
+      `</Relationships>`;
+
+    const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+      `</Relationships>`;
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+      `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+      `<Default Extension="xml" ContentType="application/xml"/>` +
+      `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+      `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+      `</Types>`;
+
+    const zip = createZip([
+      { name: '[Content_Types].xml', data: contentTypes },
+      { name: '_rels/.rels', data: rootRels },
+      { name: 'xl/workbook.xml', data: workbookXml },
+      { name: 'xl/_rels/workbook.xml.rels', data: workbookRels },
+      { name: 'xl/worksheets/sheet1.xml', data: sheetXml },
+    ]);
+
+    return new Blob([zip], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+
+  function exportItems(){
+    if(!itemsData.length){
+      alert(`No ${labels.items_label.toLowerCase()} to export.`);
+      return;
+    }
+
+    const columns = buildExportColumns();
+    const rows = prepareExportRows(columns);
+
+    const sectionName = (currentSection?.label || slug || 'section').replace(/[^a-z0-9]+/gi, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'section';
+    const dateStamp = new Date().toISOString().split('T')[0];
+    const filename = `${sectionName}_${dateStamp}.xlsx`;
+
+    const blob = createXlsx(columns, rows, currentSection?.label || sectionName || 'Section');
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      link.remove();
+    }, 0);
+  }
+
+  function setExportEnabled(enabled){
+    if(exportBtn){
+      exportBtn.disabled = !enabled;
+    }
   }
 
   function renderSortIndicator(col){
@@ -378,6 +663,7 @@ function getAutoKeys(items){
     try{
       const page = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}/items?limit=200`);
       itemsData = page.items || [];
+      setExportEnabled(itemsData.length > 0);
       columnDefs = buildColumnDefs(itemsData);
       const stored = loadColumnPrefs(accountId, slug);
       const base = stored.length ? [...stored, ...columnDefs.map(c => c.key)] : columnDefs.map(c => c.key);
@@ -398,6 +684,7 @@ function getAutoKeys(items){
     }catch(e){
       itemsTableContainer.innerHTML = `<p class="small">Failed to load items: ${e.message}</p>`;
       itemsEmptyState.classList.add('hidden');
+      setExportEnabled(false);
     }
   }
 
