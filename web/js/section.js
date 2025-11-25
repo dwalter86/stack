@@ -639,7 +639,8 @@ function getAutoKeys(items){
         }
       }
       const viewHref = `/item.html?account=${encodeURIComponent(accountId)}&section=${encodeURIComponent(slug)}&item=${encodeURIComponent(it.id)}`;
-      cells.push(`<td style="width:1%;white-space:nowrap;"><a class="btn small" href="${viewHref}">View</a></td>`);
+      const commentsHref = `/item-comments.html?account=${encodeURIComponent(accountId)}&section=${encodeURIComponent(slug)}&item=${encodeURIComponent(it.id)}`;
+      cells.push(`<td style="width:1%;white-space:nowrap;"><a class="btn small" href="${viewHref}">View</a> <a class="btn small ghost" href="${commentsHref}">Comments</a></td>`);
       return `<tr>${cells.join('')}</tr>`;
     }).join('');
 

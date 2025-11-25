@@ -51,9 +51,9 @@ function renderEndpoint(endpoint){
   const sectionName = singularize(labels.sections_label);
   const itemName = singularize(labels.items_label);
 
-  document.title = `${labels.sections_label} & ${labels.items_label} API calls`;
-  if(apiHeading){ apiHeading.textContent = `${labels.sections_label} & ${labels.items_label} API calls`; }
-  if(apiIntro){ apiIntro.textContent = `Endpoints for creating, editing, and removing ${labels.sections_label.toLowerCase()} and ${labels.items_label.toLowerCase()}.`; }
+  document.title = `${labels.sections_label}, ${labels.items_label} & comments API calls`;
+  if(apiHeading){ apiHeading.textContent = `${labels.sections_label}, ${labels.items_label} & comments API calls`; }
+  if(apiIntro){ apiIntro.textContent = `Endpoints for creating, editing, and removing ${labels.sections_label.toLowerCase()}, ${labels.items_label.toLowerCase()}, and item comments.`; }
 
   if(authCard){
     authCard.innerHTML = `
@@ -62,7 +62,7 @@ function renderEndpoint(endpoint){
           <span class="tag">Auth</span>
           <strong>Authorization</strong>
         </div>
-        <div>All ${labels.sections_label.toLowerCase()} and ${labels.items_label.toLowerCase()} endpoints require the bearer token from <code>/api/login</code>.</div>
+        <div>All ${labels.sections_label.toLowerCase()}, ${labels.items_label.toLowerCase()}, and comment endpoints require the bearer token from <code>/api/login</code>.</div>
         <div class="small" style="margin-top:6px;">1. Authenticate with <code>/api/login</code> using <code>email</code> and <code>password</code> to get <code>access_token</code>.</div>
         <div class="small">2. Send the token on every request.</div>
         <pre>Authorization: Bearer &lt;access_token&gt;</pre>
@@ -128,6 +128,40 @@ function renderEndpoint(endpoint){
           path: '/api/accounts/{account_id}/items/{item_id}',
           summary: `Remove an ${itemName} from any section by its id.`,
           params: ['account_id', 'item_id']
+        }
+      ]
+    },
+    {
+      title: 'Comment endpoints',
+      endpoints: [
+        {
+          method: 'GET',
+          path: '/api/accounts/{account_id}/items/{item_id}/comments',
+          summary: `List comments attached to an ${itemName}. Newest comments come first.`,
+          params: ['account_id', 'item_id']
+        },
+        {
+          method: 'POST',
+          path: '/api/accounts/{account_id}/items/{item_id}/comments',
+          summary: `Add a comment to an ${itemName}.`,
+          params: ['account_id', 'item_id'],
+          body: { body: 'Follow-up question or progress update' },
+          notes: 'Comment text is trimmed and cannot be empty.'
+        },
+        {
+          method: 'GET',
+          path: '/api/accounts/{account_id}/sections/{slug}/items/{item_id}/comments',
+          summary: `List ${itemName} comments within a specific ${sectionName} slug.`,
+          params: ['account_id', 'slug', 'item_id'],
+          notes: `Returns 404 if the ${itemName} is not part of the slug.`
+        },
+        {
+          method: 'POST',
+          path: '/api/accounts/{account_id}/sections/{slug}/items/{item_id}/comments',
+          summary: `Add a comment when the ${itemName} is accessed from a ${sectionName}.`,
+          params: ['account_id', 'slug', 'item_id'],
+          body: { body: 'Follow-up question or progress update' },
+          notes: `Fails with 404 if the ${itemName} does not belong to the slug.`
         }
       ]
     }
