@@ -11,10 +11,6 @@ import { loadMeOrRedirect, renderShell } from './common.js';
     { key:'customisation', label:'Customisation', description:'Rename UI labels for accounts, sections, and items for your user.', href:'/customisation.html' },
   ];
 
-  if(me.user_type === 'super_admin'){
-    sections.push({ key:'api-explorer', label:'API explorer', description:'View Swagger documentation and try API calls with your token.', href:'/api-explorer.html' });
-  }
-
   list.innerHTML = sections.map(section => `
     <div class="card account-card">
       <div>

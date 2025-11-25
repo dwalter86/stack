@@ -54,12 +54,7 @@ def save_preferences(db, user_id: str, labels: dict) -> dict:
   db.commit()
   return merged
 
-app = FastAPI(
-  title="Multi-tenant JSON API",
-  openapi_url="/api/openapi.json",
-  docs_url="/api/docs",
-  swagger_ui_parameters={"persistAuthorization": True},
-)
+app = FastAPI(title="Multi-tenant JSON API")
 app.add_middleware(
   CORSMiddleware,
   allow_origins=["*"],

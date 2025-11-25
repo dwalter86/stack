@@ -1,6 +1,5 @@
 import os
-from fastapi import HTTPException, Security, status, Request, Depends
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Header, HTTPException, status, Request, Depends
 from jose import jwt, JWTError
 from sqlalchemy import text
 from database import SessionLocal
@@ -8,18 +7,16 @@ from database import SessionLocal
 JWT_SECRET = os.environ.get("JWT_SECRET", "change-me")
 API_IP_ALLOWLIST = [s.strip() for s in os.environ.get("API_IP_ALLOWLIST", "").split(",") if s.strip()]
 
-bearer_scheme = HTTPBearer(auto_error=False)
-
 async def ip_allowlist(request: Request):
   if not API_IP_ALLOWLIST:
     return
   if request.client.host not in API_IP_ALLOWLIST:
     raise HTTPException(status_code=403, detail="IP not allowed")
 
-async def current_user(credentials: HTTPAuthorizationCredentials | None = Security(bearer_scheme)) -> str:
-  if not credentials or credentials.scheme.lower() != "bearer" or not credentials.credentials:
+async def current_user(authorization: str = Header(default="")) -> str:
+  if not authorization.startswith("Bearer "):
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-  token = credentials.credentials
+  token = authorization.split(" ", 1)[1]
   try:
     payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
     return payload["sub"]
