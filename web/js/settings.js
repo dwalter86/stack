@@ -9,6 +9,7 @@ import { loadMeOrRedirect, renderShell } from './common.js';
   const sections = [
     { key:'users', label:'Users', description:'Manage user roles, access, and settings.', href:'/admin.html' },
     { key:'customisation', label:'Customisation', description:'Rename UI labels for accounts, sections, and items for your user.', href:'/customisation.html' },
+    { key:'api-calls', label:'API calls', description:'View endpoints for managing sections and items.', href:'/settings-api-calls.html' },
   ];
 
   list.innerHTML = sections.map(section => `

@@ -169,3 +169,14 @@ pre { background:#f4f4f4; padding:8px; border-radius:6px; overflow:auto; }
 .kv-remove-btn:hover {
   color:#b00020;
 }
+/* API calls page */
+.api-group { margin-top:16px; }
+.api-group-header { display:flex; align-items:center; gap:8px; }
+.api-group-header h2 { margin:0; }
+.api-call-grid { display:flex; flex-direction:column; gap:12px; }
+.api-card-header { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.api-card code { background:#f4f4f4; padding:2px 6px; border-radius:6px; display:inline-block; }
+.api-card pre { margin-top:6px; }
+.tag.method-post { background:#e8f5e9; border-color:#b3e0c2; color:#1b5e20; }
+.tag.method-put { background:#e3f2fd; border-color:#b7d7f5; color:#0d47a1; }
+.tag.method-delete { background:#ffebee; border-color:#ffcdd2; color:#b71c1c; }
