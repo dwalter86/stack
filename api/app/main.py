@@ -193,14 +193,9 @@ async def update_account(account_id: str, body: AccountUpdate, user_id: str = De
 async def delete_account(account_id: str, user_id: str = Depends(current_user)):
   schema_name = f"tenant_{account_id.replace('-', '')}"
   with SessionLocal() as db:
-    # Drop per-tenant schema if present
-    db.execute(text("""
-      DO $$
-      DECLARE sch text := :sch;
-      BEGIN
-        EXECUTE format('DROP SCHEMA IF EXISTS %I CASCADE', sch);
-      END $$;
-    """), {"sch": schema_name})
+    db.execute(text(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE"))
+    db.execute(text("DELETE FROM memberships WHERE account_id=:a"), {"a": account_id})
+    db.execute(text("DELETE FROM sections WHERE account_id=:a"), {"a": account_id})
     result = db.execute(text("DELETE FROM accounts WHERE id=:a"), {"a": account_id})
     db.commit()
     if result.rowcount == 0:
