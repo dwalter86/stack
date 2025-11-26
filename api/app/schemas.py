@@ -67,6 +67,12 @@ class CreateAdmin(BaseModel):
     user_type: Literal["super_admin", "admin", "standard"] = "admin"
     accounts: List[str] = Field(default_factory=list)
 
+class AdminUserUpdate(BaseModel):
+    name: Optional[str] = None
+    user_type: Optional[str] = None
+    is_active: Optional[bool] = None
+    accounts: Optional[list[str]] = None
+    
 class SectionBase(BaseModel):
     slug: str
     label: str

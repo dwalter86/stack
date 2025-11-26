@@ -14,6 +14,7 @@ from schemas import (
     ItemsPage,
     AdminUser,
     CreateAdmin,
+    AdminUserUpdate,
     SectionCreate,
     SectionUpdate,
     SectionOut,
@@ -414,3 +415,70 @@ async def create_admin(body: CreateAdmin, admin_ctx = Depends(require_admin)):
     db.commit()
     prefs = get_preferences(db, new_id) if requester_type == "super_admin" else None
     return AdminUser(id=row[0], email=row[1], name=row[2], user_type=row[3], is_active=row[4], preferences=Preferences(**prefs) if prefs else None)
+
+@app.put("/api/admin/users/{user_id}", response_model=AdminUser, dependencies=[Depends(ip_allowlist)])
+async def update_user(user_id: str, body: AdminUserUpdate, admin_ctx=Depends(require_admin)):
+    requester_type = admin_ctx.get("user_type", "standard")
+    if body.user_type == "super_admin" and requester_type != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can assign super admin role")
+
+    with SessionLocal() as db:
+        target_user = db.execute(text("SELECT user_type FROM users WHERE id=:id"), {"id": user_id}).first()
+        if not target_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if target_user[0] == "super_admin" and requester_type != "super_admin":
+            raise HTTPException(status_code=403, detail="Only super admins can edit other super admins")
+
+        updates = []
+        params = {"id": user_id}
+
+        if body.name is not None:
+            updates.append("name = :name")
+            params["name"] = body.name.strip()
+        if body.user_type is not None:
+            updates.append("user_type = :user_type")
+            params["user_type"] = body.user_type
+            updates.append("is_admin = :is_admin")
+            params["is_admin"] = body.user_type in ("admin", "super_admin")
+        if body.is_active is not None:
+            updates.append("is_active = :is_active")
+            params["is_active"] = body.is_active
+
+        if updates:
+            db.execute(
+                text(f"UPDATE users SET {', '.join(updates)} WHERE id = :id"),
+                params
+            )
+
+        if body.accounts is not None:
+            db.execute(text("DELETE FROM memberships WHERE user_id = :id"), {"id": user_id})
+            if body.accounts:
+                ids = list(set(body.accounts))
+                db.execute(
+                    text("INSERT INTO memberships(user_id, account_id, role) SELECT :u, a.id, 'owner' FROM accounts a WHERE a.id = ANY(:ids::uuid[]) ON CONFLICT DO NOTHING"),
+                    {"u": user_id, "ids": ids}
+                )
+
+        row = db.execute(text("SELECT id::text, email, name, user_type, is_active FROM users WHERE id=:id"), {"id": user_id}).first()
+        db.commit()
+        prefs = get_preferences(db, user_id) if requester_type == "super_admin" else None
+        return AdminUser(id=row[0], email=row[1], name=row[2], user_type=row[3], is_active=row[4], preferences=Preferences(**prefs) if prefs else None)
+
+@app.delete("/api/admin/users/{user_id}", status_code=204, dependencies=[Depends(ip_allowlist)])
+async def delete_user(user_id: str, admin_ctx=Depends(require_admin)):
+    requester_id = admin_ctx.get("id")
+    if user_id == requester_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own user account.")
+
+    with SessionLocal() as db:
+        target_user = db.execute(text("SELECT user_type FROM users WHERE id=:id"), {"id": user_id}).first()
+        if not target_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if target_user[0] == "super_admin" and admin_ctx.get("user_type") != "super_admin":
+            raise HTTPException(status_code=403, detail="Only super admins can delete other super admins")
+
+        db.execute(text("DELETE FROM users WHERE id=:id"), {"id": user_id})
+        db.commit()
+    return None

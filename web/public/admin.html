@@ -32,6 +32,47 @@
       </ul>
       <p class="small">Customised label settings for users are only visible to super admins.</p>
     </section>
+    <!-- Add this to your admin.html file -->
+<div id="editUserModal" class="modal hidden">
+  <div class="modal-content">
+    <form id="editUserForm">
+      <h3 id="editUserModalTitle">Edit User</h3>
+      <p id="editUserMsg" class="small error-msg"></p>
+      <input type="hidden" id="editUserId">
+
+      <p>
+        <label>Name
+          <input type="text" id="editUserName" required>
+        </label>
+      </p>
+      <p>
+        <label>Email
+          <input type="email" id="editUserEmail" disabled>
+        </label>
+      </p>
+      <p>
+        <label>User Type
+          <select id="editUserType" required>
+            <option value="standard">Standard user</option>
+            <option value="admin">Admin</option>
+            <option value="super_admin">Super admin</option>
+          </select>
+        </label>
+      </p>
+      <p>
+        <label>
+          <input type="checkbox" id="editUserIsActive">
+          User is active
+        </label>
+      </p>
+
+      <div class="form-actions">
+        <button type="submit" class="btn">Save Changes</button>
+        <button type="button" id="editUserCancel" class="btn secondary">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
   </main>
   <script type="module" src="/js/admin.js"></script>
 </body></html>

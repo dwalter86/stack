@@ -130,6 +130,26 @@ function renderEndpoint(endpoint){
           params: ['account_id', 'item_id']
         }
       ]
+    },
+    {
+      title: 'Comments endpoints',
+      endpoints: [
+        {
+          method: 'GET',
+          path: '/api/accounts/{account_id}/items/{item_id}/comments',
+          summary: `List all comments for a specific ${itemName}.`,
+          params: ['account_id', 'item_id'],
+          notes: 'Returns an array of comment objects, ordered by creation date.'
+        },
+        {
+          method: 'POST',
+          path: '/api/accounts/{account_id}/items/{item_id}/comments',
+          summary: `Add a new comment to a specific ${itemName}.`,
+          params: ['account_id', 'item_id'],
+          body: { comment: 'This is a new comment.' },
+          notes: 'The user name is automatically associated with the comment based on the authenticated user.'
+        }
+      ]
     }
   ];
 
