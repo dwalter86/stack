@@ -128,7 +128,7 @@ const TYPE_LABELS = {
       if (confirm('Are you sure you want to delete this user? This cannot be undone.')) {
         try {
           await api(`/api/admin/users/${userId}`, { method: 'DELETE' });
-          btn.closest('.account-card').remove();
+          document.getElementById(`user-card-${userId}`)?.remove();
         } catch (err) {
           alert(`Failed to delete user: ${err.message}`);
         }

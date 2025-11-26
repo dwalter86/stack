@@ -26,6 +26,7 @@ export async function api(path, opts={}){
     const text = await res.text().catch(()=>res.statusText);
     throw new Error(text || ('HTTP '+res.status));
   }
+  if (res.status === 204) return null;
   const ct = res.headers.get('content-type')||'';
   return ct.includes('application/json') ? res.json() : res.text();
 }

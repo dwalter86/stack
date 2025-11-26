@@ -403,8 +403,8 @@ async def create_admin(body: CreateAdmin, admin_ctx = Depends(require_admin)):
     if body.accounts:
       ids = list({a for a in body.accounts})
       db.execute(
-        text("INSERT INTO memberships(user_id, account_id, role) SELECT :u, a.id, 'owner' FROM accounts a WHERE a.id = ANY(:ids::uuid[]) ON CONFLICT DO NOTHING"),
-        {"u": new_id, "ids": ids}
+        text("INSERT INTO memberships(user_id, account_id, role) SELECT :u, a.id, 'owner' FROM accounts a WHERE a.id = ANY(:ids) ON CONFLICT DO NOTHING"),
+        {"u": new_id, "ids": ids},
       )
     # Inherit creator customisation settings by default
     try:

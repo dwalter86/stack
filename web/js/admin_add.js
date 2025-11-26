@@ -19,9 +19,21 @@ import { loadMeOrRedirect, renderShell, api } from './common.js';
   
   try {
     const accounts = await api('/api/admin/all-accounts');
+    const selectAllCard = document.createElement('label');
+    selectAllCard.className = 'card account-card';
+    selectAllCard.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
+    selectAllCard.innerHTML = `
+      <div><strong>Select All</strong></div>
+    `;
+    selectAllCard.appendChild(selectAll);
+    grid.before(selectAllCard);
+
+    grid.style.display = 'block';
     grid.innerHTML = accounts.map(a => `
-      <label><input type="checkbox" value="${a.id}"> ${a.name} <span class="small"><code>${a.id}</code></span></label>
-    `).join('');
+      <label class="card account-card" style="display: flex; justify-content: space-between; align-items: center;">
+        <div><strong>${a.name}</strong><div class="small"><code>${a.id}</code></div></div>
+        <input type="checkbox" value="${a.id}">
+      </label>`).join('');
   } catch(e){
     grid.innerHTML = `<p class="small">Failed to load accounts: ${e.message}</p>`;
   }
