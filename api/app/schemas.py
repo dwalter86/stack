@@ -81,3 +81,13 @@ class SectionUpdate(BaseModel):
 
 class SectionOut(SectionBase):
     id: str
+
+class CommentCreate(BaseModel):
+    comment: str
+
+class CommentOut(BaseModel):
+    id: str
+    item_id: str
+    user_name: Optional[str] = None
+    comment: str
+    created_at: datetime

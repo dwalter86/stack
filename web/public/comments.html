@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Item Comments</title>
+    <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+    <header id="site-header"></header>
+    <main class="container">
+        <div class="account-header">
+            <div class="account-header-main">
+                <a class="btn" href="#" id="back-link">Back</a>
+                <div>
+                    <h1 id="page-title">Comments</h1>
+                    <p class="small" id="item-meta"></p>
+                </div>
+            </div>
+        </div>
+
+        <section class="card" id="comments-list-container">
+            <div id="comments-list"></div>
+        </section>
+
+        <section class="card">
+            <h2>Add a Comment</h2>
+            <form id="comment-form">
+                <textarea id="comment-text" name="comment" rows="4" placeholder="Write your comment here..." required></textarea>
+                <button type="submit" class="btn primary">Post Comment</button>
+            </form>
+        </section>
+    </main>
+
+    <script src="/js/comments.js" type="module"></script>
+</body>
+</html>

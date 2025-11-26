@@ -19,6 +19,8 @@ from schemas import (
     SectionOut,
     Preferences,
     PreferencesUpdate,
+    CommentCreate,
+    CommentOut,
 )
 from auth import login_and_get_user, create_token, memberships_for_user
 from deps import current_user, ip_allowlist, require_admin
@@ -169,6 +171,23 @@ async def create_account(body: AccountCreate, user_id: str = Depends(current_use
              WITH CHECK ( current_setting(''app.current_account'')::uuid = ''{account_id}'' )',
             sch);
         END IF;
+
+        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.comments (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          item_id UUID NOT NULL REFERENCES %I.items(id) ON DELETE CASCADE,
+          user_id UUID,
+          user_name TEXT,
+          comment TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )', sch, sch);
+        EXECUTE format('ALTER TABLE %I.comments ENABLE ROW LEVEL SECURITY', sch);
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = sch AND tablename = 'comments' AND policyname = 'comments_tenant_policy'
+        ) THEN
+          EXECUTE format('CREATE POLICY comments_tenant_policy ON %I.comments USING (true)', sch);
+        END IF;
+
       END $$;
     """
     db.execute(text(schema_sql))
@@ -312,6 +331,25 @@ async def list_section_items(account_id: str, slug: str, limit: int = Query(50, 
 @app.post("/api/accounts/{account_id}/sections/{slug}/items", response_model=ItemOut, dependencies=[Depends(ip_allowlist)])
 async def create_section_item(account_id: str, slug: str, body: ItemCreate, user_id: str = Depends(current_user)):
   return rls.create_item(account_id, section=slug, name=body.name, data=body.data)
+
+# --- Comments API ---
+
+@app.get("/api/accounts/{account_id}/items/{item_id}/comments", response_model=list[CommentOut], dependencies=[Depends(ip_allowlist)])
+async def list_item_comments(account_id: str, item_id: str, user_id: str = Depends(current_user)):
+  return rls.list_comments(account_id, item_id)
+
+@app.post("/api/accounts/{account_id}/items/{item_id}/comments", response_model=CommentOut, status_code=201, dependencies=[Depends(ip_allowlist)])
+async def create_item_comment(account_id: str, item_id: str, body: CommentCreate, user_id: str = Depends(current_user)):
+  with SessionLocal() as db:
+    user_row = db.execute(text("SELECT COALESCE(name, email) FROM users WHERE id = :u"), {"u": user_id}).first()
+    if not user_row:
+      raise HTTPException(status_code=403, detail="User not found")
+    user_name = user_row[0]
+
+  comment = body.comment.strip()
+  if not comment:
+    raise HTTPException(status_code=400, detail="Comment cannot be empty")
+  return rls.create_comment(account_id, item_id, user_id, user_name, comment)
 
 # --- Admin API ---
 

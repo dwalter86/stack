@@ -76,6 +76,33 @@ def delete_item(account_id: str, item_id: str):
     db.execute(text(sql), {"id": item_id})
     db.commit()
 
+def list_comments(account_id: str, item_id: str):
+  schema = _schema_name(account_id)
+  sql = f"""
+  SELECT id::text, item_id::text, user_name, comment, created_at
+  FROM {schema}.comments
+  WHERE item_id = :item_id
+  ORDER BY created_at ASC
+  """
+  with SessionLocal() as db:
+    db.execute(set_current_account(account_id))
+    rows = db.execute(text(sql), {"item_id": item_id}).all()
+    return [dict(r._mapping) for r in rows]
+
+def create_comment(account_id: str, item_id: str, user_id: str, user_name: str, comment: str):
+  schema = _schema_name(account_id)
+  sql = f"""
+  INSERT INTO {schema}.comments (item_id, user_id, user_name, comment)
+  VALUES (:item_id, :user_id, :user_name, :comment)
+  RETURNING id::text, item_id::text, user_name, comment, created_at
+  """
+  with SessionLocal() as db:
+    db.execute(set_current_account(account_id))
+    params = {"item_id": item_id, "user_id": user_id, "user_name": user_name, "comment": comment}
+    row = db.execute(text(sql), params).first()
+    db.commit()
+    return dict(row._mapping)
+
 def get_item(account_id: str, item_id: str):
   schema = _schema_name(account_id)
   sql = f"""
