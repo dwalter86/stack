@@ -91,24 +91,17 @@ function reconcileVisibility(columns, stored){
 }
 
 function getAutoKeys(items){
-  const keySet = new Set();
-  for(const it of items){
+  const keys = [];
+  for(let i = items.length - 1; i >= 0; i--){
+    const it = items[i];
     if(it.data && typeof it.data === 'object'){
-      Object.keys(it.data).forEach(k => keySet.add(k));
+      Object.keys(it.data).forEach(k => {
+        if(!keys.includes(k)) keys.push(k);
+      });
     }
   }
-  let keys = Array.from(keySet);
-  const priority = ['title','name','label'];
-  keys.sort((a,b) => {
-    const ia = priority.indexOf(a.toLowerCase());
-    const ib = priority.indexOf(b.toLowerCase());
-    if(ia !== -1 && ib === -1) return -1;
-    if(ib !== -1 && ia === -1) return 1;
-    return a.localeCompare(b);
-  });
   const MAX_COLS = 8;
-  if(keys.length > MAX_COLS) keys = keys.slice(0, MAX_COLS);
-  return keys;
+  return keys.slice(0, MAX_COLS);
 }
 
 (async () => {
