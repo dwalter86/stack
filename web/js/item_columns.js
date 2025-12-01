@@ -39,14 +39,6 @@ function getAutoKeys(items){
     }
   }
   let keys = Array.from(keySet);
-  const priority = ['title','name','label'];
-  keys.sort((a,b) => {
-    const ia = priority.indexOf(a.toLowerCase());
-    const ib = priority.indexOf(b.toLowerCase());
-    if(ia !== -1 && ib === -1) return -1;
-    if(ib !== -1 && ia === -1) return 1;
-    return a.localeCompare(b);
-  });
   const MAX_COLS = 8;
   if(keys.length > MAX_COLS) keys = keys.slice(0, MAX_COLS);
   return keys;
