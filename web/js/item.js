@@ -113,9 +113,9 @@ function formatDateTime(val){
         });
       }
     } else {
-      // No schema: list keys alphabetically
+      // No schema: list keys in default object order
       if(data && typeof data === 'object'){
-        Object.keys(data).sort().forEach(k => {
+        Object.keys(data).forEach(k => {
           rows.push({ label: k, value: data[k] });
         });
       }
