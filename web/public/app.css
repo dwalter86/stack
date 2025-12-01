@@ -7,17 +7,16 @@ header {
   background:#c4c4c4;
   border-bottom:1px solid var(--border);
   height:200px;
-  display:flex;
-  align-items:flex-start;
 }
 footer { background:var(--card); border-top:1px solid var(--border); border-bottom:none; color:var(--muted); }
 .container { margin:0 auto; padding:16px 30px; }
-.header-bar.container { padding-top:15px; }
+.header-bar.container { padding-top:45px; }
 .header-bar { display:flex; align-items:center; gap:12px; }
 .menu { display:flex; gap:8px; align-items:center; }
-.menu a, .btn { text-decoration:none; color:var(--fg); border:1px solid var(--border); padding:6px 10px; border-radius:6px; background:#fff; cursor:pointer; }
+.menu a, .btn { text-decoration:none; color:var(--fg); border-radius:6px; cursor:pointer; }
+.btnBack { text-decoration:none; color:var(--fg); border:1px solid var(--border); padding:6px 10px; border-radius:6px; background:#fff; cursor:pointer; }
 .menu .pill { border:none; color:var(--muted); }
-main.container { padding-top:24px; padding-bottom:24px; background:var(--card); border:1px solid var(--border); border-radius:10px; margin-top:-115px; position:relative; }
+.page-container { padding-top:24px; padding-bottom:24px; padding-left: 15px; padding-right: 15px; background:var(--card); border:1px solid var(--border); border-radius:10px; margin-top:-115px; position:relative; background: #fff; margin-left: 15px; margin-right: 15px; }
 table { width:100%; border-collapse:collapse; }
 th, td { padding:8px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
 .sort-toggle { border:none; background:transparent; font:inherit; cursor:pointer; display:inline-flex; align-items:center; gap:6px; padding:0; }
@@ -125,13 +124,17 @@ pre { background:#f4f4f4; padding:8px; border-radius:6px; overflow:auto; }
 .btn.primary {
   background:#222;
   color:#fff;
+  border:1px solid var(--border);
+  padding:6px 10px;
+
 }
 .btn.primary:hover {
   filter:brightness(0.95);
 }
 .btn.small {
   font-size:.85em;
-  padding:4px 8px;
+  border:1px solid var(--border);
+  padding:6px 10px;
 }
 .hidden { display:none !important; }
 
