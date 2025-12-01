@@ -1,4 +1,4 @@
-import { loadMeOrRedirect, renderShell, api, getLabels } from './common.js';
+import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences } from './common.js';
 
 function qs(name){
   const m = new URLSearchParams(location.search).get(name);
@@ -14,6 +14,8 @@ function slugify(val){
   const me = await loadMeOrRedirect(); if(!me) return;
   renderShell(me);
   const labels = getLabels(me);
+  const preferences = getPreferences(me);
+  const showSlugs = preferences.show_slugs;
 
   const accountId = qs('id');
   if(!accountId){
@@ -130,19 +132,22 @@ function slugify(val){
         return;
       }
       emptyStateEl.classList.add('hidden');
-      sectionListEl.innerHTML = sections.map(s => `
+      sectionListEl.innerHTML = sections.map(s => {
+        const slugLine = showSlugs ? `<div class="small"><code>${s.slug}</code></div>` : '';
+        return `
         <div class="card" style="margin-bottom:8px;">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
             <div>
               <strong>${s.label}</strong>
-              <div class="small"><code>${s.slug}</code></div>
+              ${slugLine}
             </div>
             <div>
               <a class="btn" href="/section.html?account=${encodeURIComponent(accountId)}&slug=${encodeURIComponent(s.slug)}">Open</a>
             </div>
           </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
     }catch(e){
       sectionListEl.innerHTML = `<p class="small">Failed to load sections: ${e.message}</p>`;
       emptyStateEl.classList.add('hidden');

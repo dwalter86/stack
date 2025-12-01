@@ -1,9 +1,11 @@
-import { loadMeOrRedirect, renderShell, api, getLabels } from './common.js';
+import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences } from './common.js';
 (async () => {
   const me = await loadMeOrRedirect(); if(!me) return;
   renderShell(me);
   
   const labels = getLabels(me);
+  const preferences = getPreferences(me);
+  const showSlugs = preferences.show_slugs;
   const accountHeading = document.getElementById('accountsHeading');
   const emptyCopy = document.getElementById('accountsEmptyCopy');
   const addAccountBtnLabel = document.getElementById('addAccountBtnLabel');
@@ -51,17 +53,20 @@ import { loadMeOrRedirect, renderShell, api, getLabels } from './common.js';
         return;
       }
       emptyStateEl.classList.add('hidden');
-      listEl.innerHTML = accounts.map(a => `
+      listEl.innerHTML = accounts.map(a => {
+        const slugLine = showSlugs ? `<div class="small"><code>${a.id}</code></div>` : '';
+        return `
         <div class="card account-card">
           <div>
             <strong>${a.name}</strong>
-            <div class="small"><code>${a.id}</code></div>
+            ${slugLine}
           </div>
           <div>
             <a class="btn" href="/account.html?id=${encodeURIComponent(a.id)}">Open</a>
           </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
     } catch(e){
       listEl.innerHTML = `<p class="small">Failed to load accounts: ${e.message}</p>`;
       emptyStateEl.classList.add('hidden');

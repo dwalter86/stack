@@ -8,12 +8,27 @@ export const DEFAULT_LABELS = {
   items_label: 'Items',
 };
 
-export function getLabels(user){
+export const DEFAULT_PREFERENCES = {
+  ...DEFAULT_LABELS,
+  show_slugs: false,
+};
+
+export function getPreferences(user){
   const prefs = user?.preferences || {};
   return {
     accounts_label: (prefs.accounts_label || DEFAULT_LABELS.accounts_label).trim() || DEFAULT_LABELS.accounts_label,
     sections_label: (prefs.sections_label || DEFAULT_LABELS.sections_label).trim() || DEFAULT_LABELS.sections_label,
     items_label: (prefs.items_label || DEFAULT_LABELS.items_label).trim() || DEFAULT_LABELS.items_label,
+    show_slugs: !!prefs.show_slugs,
+  };
+}
+
+export function getLabels(user){
+  const prefs = getPreferences(user);
+  return {
+    accounts_label: prefs.accounts_label,
+    sections_label: prefs.sections_label,
+    items_label: prefs.items_label,
   };
 }
 

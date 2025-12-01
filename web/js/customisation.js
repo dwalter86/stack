@@ -1,4 +1,4 @@
-import { loadMeOrRedirect, renderShell, api, getLabels, DEFAULT_LABELS } from './common.js';
+import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences, DEFAULT_LABELS, DEFAULT_PREFERENCES } from './common.js';
 
 (async () => {
   const me = await loadMeOrRedirect(); if(!me) return;
@@ -10,13 +10,16 @@ import { loadMeOrRedirect, renderShell, api, getLabels, DEFAULT_LABELS } from '.
   const accountsInput = document.getElementById('accountsLabel');
   const sectionsInput = document.getElementById('sectionsLabel');
   const itemsInput = document.getElementById('itemsLabel');
+  const showSlugsInput = document.getElementById('showSlugs');
   const resetBtn = document.getElementById('resetDefaults');
 
   const labels = getLabels(me);
+  const preferences = getPreferences(me);
   document.title = 'Customisation';
   accountsInput.value = labels.accounts_label;
   sectionsInput.value = labels.sections_label;
   itemsInput.value = labels.items_label;
+  showSlugsInput.checked = preferences.show_slugs;
 
   async function save(payload){
     msg.textContent = 'Saving…';
@@ -36,6 +39,7 @@ import { loadMeOrRedirect, renderShell, api, getLabels, DEFAULT_LABELS } from '.
       accounts_label: accountsInput.value.trim(),
       sections_label: sectionsInput.value.trim(),
       items_label: itemsInput.value.trim(),
+      show_slugs: showSlugsInput.checked,
     });
   });
 
@@ -45,7 +49,8 @@ import { loadMeOrRedirect, renderShell, api, getLabels, DEFAULT_LABELS } from '.
       accountsInput.value = DEFAULT_LABELS.accounts_label;
       sectionsInput.value = DEFAULT_LABELS.sections_label;
       itemsInput.value = DEFAULT_LABELS.items_label;
-      await save(DEFAULT_LABELS);
+      showSlugsInput.checked = DEFAULT_PREFERENCES.show_slugs;
+      await save(DEFAULT_PREFERENCES);
     });
   }
 })();

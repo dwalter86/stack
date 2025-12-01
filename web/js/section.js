@@ -1,4 +1,4 @@
-import { loadMeOrRedirect, renderShell, api, getLabels } from './common.js';
+import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences } from './common.js';
 
 function qs(name){
   const m = new URLSearchParams(location.search).get(name);
@@ -115,6 +115,8 @@ function getAutoKeys(items){
   const me = await loadMeOrRedirect(); if(!me) return;
   renderShell(me);
   const labels = getLabels(me);
+  const preferences = getPreferences(me);
+  const showSlugs = preferences.show_slugs;
 
   const accountId = qs('account');
   const slug = qs('slug');
@@ -184,13 +186,13 @@ function getAutoKeys(items){
       const section = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`);
       currentSection = section;
       titleEl.textContent = section.label;
-      metaEl.textContent = `${accountName} · slug: ${section.slug}`;
+      metaEl.textContent = showSlugs ? `${accountName} · slug: ${section.slug}` : accountName;
       const s = section.schema || {};
       schemaFields = Array.isArray(s.fields) ? s.fields : [];
       document.title = `${section.label} | ${labels.sections_label}`;
     } catch {
       titleEl.textContent = `Section ${slug}`;
-      metaEl.textContent = accountName;
+      metaEl.textContent = showSlugs ? `${accountName} · slug: ${slug}` : accountName;
       currentSection = { slug, label: slug, schema: {} };
       schemaFields = [];
       document.title = `${labels.sections_label} ${slug}`;

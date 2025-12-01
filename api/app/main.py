@@ -29,26 +29,31 @@ import rls
 from sqlalchemy import text
 from database import SessionLocal
 
-DEFAULT_LABELS: dict[str, str] = {
+DEFAULT_PREFERENCES: dict[str, str | bool] = {
   "accounts_label": "Home",
   "sections_label": "Sections",
   "items_label": "Items",
+  "show_slugs": False,
 }
 
-def merge_labels(raw: dict | None) -> dict:
-  merged = dict(DEFAULT_LABELS)
+def merge_preferences(raw: dict | None) -> dict:
+  merged = dict(DEFAULT_PREFERENCES)
   if isinstance(raw, dict):
     for key, val in raw.items():
-      if key in merged and isinstance(val, str) and val.strip():
+      if key not in merged:
+        continue
+      if isinstance(merged[key], bool):
+        merged[key] = bool(val)
+      elif isinstance(val, str) and val.strip():
         merged[key] = val.strip()
   return merged
 
 def get_preferences(db, user_id: str) -> dict:
   row = db.execute(text("SELECT ui_labels FROM user_preferences WHERE user_id=:u LIMIT 1"), {"u": user_id}).first()
-  return merge_labels(row[0] if row else None)
+  return merge_preferences(row[0] if row else None)
 
 def save_preferences(db, user_id: str, labels: dict) -> dict:
-  merged = merge_labels(labels)
+  merged = merge_preferences(labels)
   db.execute(text("""
     INSERT INTO user_preferences(user_id, ui_labels)
     VALUES (:u, CAST(:l AS jsonb))
@@ -100,7 +105,7 @@ async def read_preferences(user_id: str = Depends(current_user)):
 
 @app.put("/api/me/preferences", response_model=Preferences, dependencies=[Depends(ip_allowlist)])
 async def update_preferences(body: PreferencesUpdate, user_id: str = Depends(current_user)):
-  updates: dict[str, str] = {}
+  updates: dict[str, str | bool] = {}
   for field in ("accounts_label", "sections_label", "items_label"):
     val = getattr(body, field)
     if val is not None:
@@ -108,6 +113,9 @@ async def update_preferences(body: PreferencesUpdate, user_id: str = Depends(cur
       if not cleaned:
         raise HTTPException(status_code=400, detail=f"{field.replace('_', ' ').title()} cannot be empty")
       updates[field] = cleaned
+
+  if body.show_slugs is not None:
+    updates["show_slugs"] = bool(body.show_slugs)
 
   with SessionLocal() as db:
     current = get_preferences(db, user_id)

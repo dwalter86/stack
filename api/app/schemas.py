@@ -14,11 +14,13 @@ class Preferences(BaseModel):
     accounts_label: str = "Home"
     sections_label: str = "Sections"
     items_label: str = "Items"
+    show_slugs: bool = False
 
 class PreferencesUpdate(BaseModel):
     accounts_label: Optional[str] = None
     sections_label: Optional[str] = None
     items_label: Optional[str] = None
+    show_slugs: Optional[bool] = None
 
 class MeOut(BaseModel):
     id: str

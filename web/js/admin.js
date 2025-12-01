@@ -1,4 +1,4 @@
-import { loadMeOrRedirect, renderShell, api, DEFAULT_LABELS } from './common.js';
+import { loadMeOrRedirect, renderShell, api, DEFAULT_PREFERENCES } from './common.js';
 
 const TYPE_LABELS = {
   super_admin: 'Super admin',
@@ -33,11 +33,21 @@ const TYPE_LABELS = {
     if(!showPreferences || !user.preferences) return '';
     const prefs = user.preferences;
     const changed = Object.entries(prefs).filter(([k,v]) => {
-      const defaultVal = DEFAULT_LABELS[k] || '';
-      return (v || '').trim() && v.trim() !== defaultVal;
+      if(!(k in DEFAULT_PREFERENCES)) return false;
+      const defaultVal = DEFAULT_PREFERENCES[k];
+      if(typeof defaultVal === 'boolean') return Boolean(v) !== defaultVal;
+      if(typeof v !== 'string') return false;
+      const trimmed = v.trim();
+      return trimmed && trimmed !== defaultVal;
     });
     if(!changed.length) return '<div class="small">Customised fields: none</div>';
-    const items = changed.map(([k,v]) => `<li><strong>${k.replace('_',' ')}:</strong> ${v}</li>`).join('');
+    const items = changed.map(([k,v]) => {
+      const label = k.replace('_',' ');
+      if(typeof DEFAULT_PREFERENCES[k] === 'boolean'){
+        return `<li><strong>${label}:</strong> ${v ? 'Yes' : 'No'}</li>`;
+      }
+      return `<li><strong>${label}:</strong> ${v}</li>`;
+    }).join('');
     return `<div class="small">Customised fields:<ul>${items}</ul></div>`;
   }
 
