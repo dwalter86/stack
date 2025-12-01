@@ -12,15 +12,61 @@ function escapeHtml(str){
     .replace(/>/g,'&gt;');
 }
 
+function renderObjectTable(obj){
+  const entries = Object.entries(obj || {});
+  if(!entries.length) return '<span class="muted">{}</span>';
+  const rows = entries.map(([k, v]) => `<tr><th>${escapeHtml(k)}</th><td>${renderStructuredValue(v)}</td></tr>`).join('');
+  return `<table class="nested-table"><tbody>${rows}</tbody></table>`;
+}
+
+function renderArrayTable(arr){
+  if(!arr.length) return '<span class="muted">[]</span>';
+
+  const objectRows = arr.every(v => v && typeof v === 'object' && !Array.isArray(v));
+  if(objectRows){
+    const keys = Array.from(new Set(arr.flatMap(v => Object.keys(v || {}))));
+    if(keys.length){
+      const header = `<tr><th></th>${keys.map(k => `<th>${escapeHtml(k)}</th>`).join('')}</tr>`;
+      const rows = arr.map((v, idx) => {
+        const cells = keys.map(k => `<td>${renderStructuredValue((v || {})[k])}</td>`).join('');
+        return `<tr><th class="muted">#${idx + 1}</th>${cells}</tr>`;
+      }).join('');
+      return `<table class="nested-table"><thead>${header}</thead><tbody>${rows}</tbody></table>`;
+    }
+  }
+
+  const rows = arr.map((item, idx) => `<tr><th class="muted">[${idx}]</th><td>${renderStructuredValue(item)}</td></tr>`).join('');
+  return `<table class="nested-table"><tbody>${rows}</tbody></table>`;
+}
+
+function renderStructuredValue(val){
+  if(val === null || val === undefined){
+    return '<span class="muted">(empty)</span>';
+  }
+
+  if(Array.isArray(val)){
+    return renderArrayTable(val);
+  }
+
+  if(typeof val === 'object'){
+    return renderObjectTable(val);
+  }
+
+  const str = String(val);
+  if(str.includes('\n')){
+    return `<pre style="margin:0;white-space:pre-wrap;">${escapeHtml(str)}</pre>`;
+  }
+  return escapeHtml(str);
+}
+
 function formatCellValue(val){
   if(val === null || val === undefined) return '';
   if(typeof val === 'object'){
-    try{
-      const s = JSON.stringify(val);
-      return s.length > 40 ? escapeHtml(s.slice(0, 37) + '…') : escapeHtml(s);
-    }catch{
-      return escapeHtml(String(val));
-    }
+    const isArray = Array.isArray(val);
+    const summary = isArray
+      ? `Array (${val.length})`
+      : `Object${Object.keys(val).length ? ` (${Object.keys(val).length} keys)` : ''}`;
+    return `<details class="struct-preview"><summary>${escapeHtml(summary)}</summary>${renderStructuredValue(val)}</details>`;
   }
   return escapeHtml(String(val));
 }
