@@ -31,6 +31,96 @@ function saveColumnPrefs(accountId, slug, keys){
   localStorage.setItem(prefKey(accountId, slug), JSON.stringify(keys));
 }
 
+function templatePrefKey(accountId, slug){
+  return `columnTemplate:${accountId}:${slug||'default'}`;
+}
+
+function loadTemplate(accountId, slug){
+  try {
+    const raw = localStorage.getItem(templatePrefKey(accountId, slug));
+    if(!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveTemplate(accountId, slug, tpl){
+  localStorage.setItem(templatePrefKey(accountId, slug), JSON.stringify(tpl));
+}
+
+const SAMPLE_TEMPLATE = {
+  name: 'template',
+  data: {
+    dataname1: {
+      friendlyname: 'Contact',
+      type: 'string',
+      order: 1,
+    },
+    dataname2: {
+      friendlyname: 'Amount',
+      type: 'number',
+      order: 2,
+    },
+    dataname3: {
+      friendlyname: 'Status',
+      type: 'dropdown',
+      order: 3,
+      options: {
+        option1: 'Ready',
+        option2: 'Done',
+        option3: 'In Progress',
+      }
+    }
+  }
+};
+
+function parseTemplate(tpl){
+  if(!tpl || typeof tpl !== 'object') return { fields: [] };
+  const data = tpl.data && typeof tpl.data === 'object' ? tpl.data : {};
+  const fields = Object.entries(data).map(([key, val], idx) => {
+    const type = (val?.type || 'string').toLowerCase();
+    const orderRaw = val?.order;
+    const parsedOrder = typeof orderRaw === 'number' ? orderRaw : (typeof orderRaw === 'string' ? parseInt(orderRaw, 10) : null);
+    let options = [];
+    if(type === 'dropdown'){
+      if(Array.isArray(val?.options)){
+        options = val.options.map(o => String(o));
+      } else if(val?.options && typeof val.options === 'object'){
+        options = Object.values(val.options).map(o => String(o));
+      }
+    }
+    return {
+      key,
+      label: val?.friendlyname || key,
+      type,
+      options,
+      order: Number.isFinite(parsedOrder) ? parsedOrder : null,
+      index: idx,
+    };
+  });
+
+  fields.sort((a, b) => {
+    const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+    const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+    if(orderA !== orderB) return orderA - orderB;
+    return a.index - b.index;
+  });
+
+  return { fields };
+}
+
+function orderFields(fields){
+  return [...(fields || [])].sort((a, b) => {
+    const orderA = a?.order ?? Number.MAX_SAFE_INTEGER;
+    const orderB = b?.order ?? Number.MAX_SAFE_INTEGER;
+    if(orderA !== orderB) return orderA - orderB;
+    const labelA = a?.label || a?.key || '';
+    const labelB = b?.label || b?.key || '';
+    return labelA.localeCompare(labelB, undefined, { sensitivity: 'base' });
+  });
+}
+
 function getAutoKeys(items){
   const keySet = new Set();
   for(const it of items){
@@ -50,7 +140,7 @@ function buildColumns(items, schemaFields){
     { key: 'created_at', label: 'Date added' },
   ];
   if(schemaFields && schemaFields.length){
-    const visibleFields = schemaFields.filter(f => f.showInTable !== false);
+    const visibleFields = orderFields(schemaFields.filter(f => f.showInTable !== false));
     visibleFields.forEach(f => {
       columns.push({ key: f.key, label: f.label || f.key });
     });
@@ -94,6 +184,10 @@ function reconcileVisibility(columns, stored){
   const saveBtn = document.getElementById('saveColumnsBtn');
   const saveMessage = document.getElementById('saveMessage');
   const title = document.getElementById('settingsTitle');
+  const templateInput = document.getElementById('templateInput');
+  const templateExample = document.getElementById('templateExample');
+  const templateMessage = document.getElementById('templateMessage');
+  const saveTemplateBtn = document.getElementById('saveTemplateBtn');
 
   if(backToSection){
     backToSection.href = `/section.html?account=${encodeURIComponent(accountId)}&slug=${encodeURIComponent(slug)}`;
@@ -109,14 +203,21 @@ function reconcileVisibility(columns, stored){
   }
 
   let sectionLabel = slug;
-  let schemaFields = [];
+  const storedTemplate = loadTemplate(accountId, slug);
+  const parsedTemplate = parseTemplate(storedTemplate);
+  let schemaFields = parsedTemplate.fields || [];
   try {
     const section = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`);
     const schema = section.schema || {};
-    schemaFields = Array.isArray(schema.fields) ? schema.fields : [];
+    const apiFields = Array.isArray(schema.fields) ? schema.fields : [];
+    if(!schemaFields.length){
+      schemaFields = apiFields;
+    }
     sectionLabel = section.label || slug;
   } catch {
-    schemaFields = [];
+    if(!schemaFields.length){
+      schemaFields = [];
+    }
     sectionLabel = slug;
   }
 
@@ -131,7 +232,15 @@ function reconcileVisibility(columns, stored){
     items = [];
   }
 
-  const columns = buildColumns(items, schemaFields);
+  if(templateExample){
+    templateExample.textContent = JSON.stringify(SAMPLE_TEMPLATE, null, 2);
+  }
+  if(templateInput){
+    const tplToShow = storedTemplate || SAMPLE_TEMPLATE;
+    templateInput.value = JSON.stringify(tplToShow, null, 2);
+  }
+
+  let columns = buildColumns(items, schemaFields);
   const stored = loadColumnPrefs(accountId, slug);
   let visibleKeys = reconcileVisibility(columns, stored.length ? stored : columns.map(c => c.key));
 
@@ -169,5 +278,35 @@ function reconcileVisibility(columns, stored){
     visibleKeys = merged;
     saveColumnPrefs(accountId, slug, merged);
     saveMessage.textContent = 'Saved. Return to the section to see your updated table.';
+  });
+
+  saveTemplateBtn?.addEventListener('click', () => {
+    templateMessage.textContent = '';
+    if(!templateInput){
+      templateMessage.textContent = 'Template editor not found.';
+      return;
+    }
+    const raw = templateInput.value.trim();
+    if(!raw){
+      templateMessage.textContent = 'Enter a template to save.';
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      const normalized = parseTemplate(parsed);
+      if(!normalized.fields.length){
+        templateMessage.textContent = 'Template must include at least one column inside the data object.';
+        return;
+      }
+      saveTemplate(accountId, slug, parsed);
+      schemaFields = normalized.fields;
+      columns = buildColumns(items, schemaFields);
+      visibleKeys = reconcileVisibility(columns, columns.map(c => c.key));
+      saveColumnPrefs(accountId, slug, visibleKeys);
+      renderList();
+      templateMessage.textContent = 'Template saved. Column visibility was refreshed from the template.';
+    } catch(err){
+      templateMessage.textContent = `Could not parse JSON: ${err.message}`;
+    }
   });
 })();

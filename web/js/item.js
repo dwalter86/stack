@@ -59,6 +59,66 @@ function renderValueHtml(val){
   return escapeHtml(str);
 }
 
+function templatePrefKey(accountId, slug){
+  return `columnTemplate:${accountId}:${slug||'default'}`;
+}
+
+function loadColumnTemplate(accountId, slug){
+  try {
+    const raw = localStorage.getItem(templatePrefKey(accountId, slug));
+    if(!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function parseTemplate(tpl){
+  if(!tpl || typeof tpl !== 'object') return { fields: [] };
+  const data = tpl.data && typeof tpl.data === 'object' ? tpl.data : {};
+  const fields = Object.entries(data).map(([key, val], idx) => {
+    const type = (val?.type || 'string').toLowerCase();
+    const orderRaw = val?.order;
+    const parsedOrder = typeof orderRaw === 'number' ? orderRaw : (typeof orderRaw === 'string' ? parseInt(orderRaw, 10) : null);
+    let options = [];
+    if(type === 'dropdown'){
+      if(Array.isArray(val?.options)){
+        options = val.options.map(o => String(o));
+      } else if(val?.options && typeof val.options === 'object'){
+        options = Object.values(val.options).map(o => String(o));
+      }
+    }
+    return {
+      key,
+      label: val?.friendlyname || key,
+      type,
+      options,
+      order: Number.isFinite(parsedOrder) ? parsedOrder : null,
+      index: idx,
+    };
+  });
+
+  fields.sort((a, b) => {
+    const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+    const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+    if(orderA !== orderB) return orderA - orderB;
+    return a.index - b.index;
+  });
+
+  return { fields };
+}
+
+function orderFields(fields){
+  return [...(fields || [])].sort((a, b) => {
+    const orderA = a?.order ?? Number.MAX_SAFE_INTEGER;
+    const orderB = b?.order ?? Number.MAX_SAFE_INTEGER;
+    if(orderA !== orderB) return orderA - orderB;
+    const labelA = a?.label || a?.key || '';
+    const labelB = b?.label || b?.key || '';
+    return labelA.localeCompare(labelB, undefined, { sensitivity: 'base' });
+  });
+}
+
 function formatDateTime(val){
   if(!val) return '';
   try {
@@ -109,14 +169,18 @@ function formatDateTime(val){
 
   let section = null;
   let schemaFields = [];
+  let templateFields = [];
   if(sectionSlug){
     try {
       section = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(sectionSlug)}`);
       const s = section.schema || {};
       schemaFields = Array.isArray(s.fields) ? s.fields : [];
+      const columnTemplate = loadColumnTemplate(accountId, sectionSlug);
+      templateFields = orderFields(parseTemplate(columnTemplate).fields);
     } catch {
       section = null;
       schemaFields = [];
+      templateFields = [];
     }
   }
 
@@ -132,16 +196,33 @@ function formatDateTime(val){
     const rows = [];
 
     // If schema present, respect its order/labels
+    const templateByKey = new Map(templateFields.map(f => [f.key, f]));
+
     if(schemaFields.length){
       const usedKeys = new Set();
       for(const f of schemaFields){
         const key = f.key;
         usedKeys.add(key);
-        const label = f.label || key;
+        const tplField = templateByKey.get(key);
+        const label = tplField?.label || f.label || key;
         const val = data ? data[key] : undefined;
         rows.push({ label, value: val });
       }
       // Include any extra keys not in schema at the bottom
+      if(data && typeof data === 'object'){
+        Object.keys(data).forEach(k => {
+          if(usedKeys.has(k)) return;
+          const tplField = templateByKey.get(k);
+          rows.push({ label: tplField?.label || k, value: data[k] });
+        });
+      }
+    } else if(templateFields.length){
+      const usedKeys = new Set();
+      for(const f of templateFields){
+        const key = f.key;
+        usedKeys.add(key);
+        rows.push({ label: f.label || key, value: data ? data[key] : undefined });
+      }
       if(data && typeof data === 'object'){
         Object.keys(data).forEach(k => {
           if(usedKeys.has(k)) return;

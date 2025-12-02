@@ -121,6 +121,66 @@ function loadColumnPrefs(accountId, slug){
   }
 }
 
+function templatePrefKey(accountId, slug){
+  return `columnTemplate:${accountId}:${slug||'default'}`;
+}
+
+function loadColumnTemplate(accountId, slug){
+  try {
+    const raw = localStorage.getItem(templatePrefKey(accountId, slug));
+    if(!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function parseTemplate(tpl){
+  if(!tpl || typeof tpl !== 'object') return { fields: [] };
+  const data = tpl.data && typeof tpl.data === 'object' ? tpl.data : {};
+  const fields = Object.entries(data).map(([key, val], idx) => {
+    const type = (val?.type || 'string').toLowerCase();
+    const orderRaw = val?.order;
+    const parsedOrder = typeof orderRaw === 'number' ? orderRaw : (typeof orderRaw === 'string' ? parseInt(orderRaw, 10) : null);
+    let options = [];
+    if(type === 'dropdown'){
+      if(Array.isArray(val?.options)){
+        options = val.options.map(o => String(o));
+      } else if(val?.options && typeof val.options === 'object'){
+        options = Object.values(val.options).map(o => String(o));
+      }
+    }
+    return {
+      key,
+      label: val?.friendlyname || key,
+      type,
+      options,
+      order: Number.isFinite(parsedOrder) ? parsedOrder : null,
+      index: idx,
+    };
+  });
+
+  fields.sort((a, b) => {
+    const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+    const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+    if(orderA !== orderB) return orderA - orderB;
+    return a.index - b.index;
+  });
+
+  return { fields };
+}
+
+function orderFields(fields){
+  return [...(fields || [])].sort((a, b) => {
+    const orderA = a?.order ?? Number.MAX_SAFE_INTEGER;
+    const orderB = b?.order ?? Number.MAX_SAFE_INTEGER;
+    if(orderA !== orderB) return orderA - orderB;
+    const labelA = a?.label || a?.key || '';
+    const labelB = b?.label || b?.key || '';
+    return labelA.localeCompare(labelB, undefined, { sensitivity: 'base' });
+  });
+}
+
 function reconcileVisibility(columns, stored){
   const available = new Set(columns.map(c => c.key));
   const result = [];
@@ -214,7 +274,8 @@ function getAutoKeys(items){
   }
 
   let currentSection = null;
-  let schemaFields = []; // section.schema.fields || []
+  const templateFromPrefs = parseTemplate(loadColumnTemplate(accountId, slug));
+  let schemaFields = templateFromPrefs.fields || [];
   let itemsData = [];
   let columnDefs = [];
   let visibleColumns = [];
@@ -227,13 +288,14 @@ function getAutoKeys(items){
       titleEl.textContent = section.label;
       metaEl.textContent = showSlugs ? `${accountName} · slug: ${section.slug}` : accountName;
       const s = section.schema || {};
-      schemaFields = Array.isArray(s.fields) ? s.fields : [];
+      const apiFields = Array.isArray(s.fields) ? s.fields : [];
+      schemaFields = templateFromPrefs.fields.length ? templateFromPrefs.fields : apiFields;
       document.title = `${section.label} | ${labels.sections_label}`;
     } catch {
       titleEl.textContent = `Section ${slug}`;
       metaEl.textContent = showSlugs ? `${accountName} · slug: ${slug}` : accountName;
       currentSection = { slug, label: slug, schema: {} };
-      schemaFields = [];
+      schemaFields = templateFromPrefs.fields.length ? templateFromPrefs.fields : [];
       document.title = `${labels.sections_label} ${slug}`;
     }
   }
@@ -271,19 +333,23 @@ function getAutoKeys(items){
     itemForm.reset();
     // Setup UI depending on schema
     if(schemaFields && schemaFields.length){
-      schemaFieldsContainer.innerHTML = schemaFields.map(f => {
+      const ordered = orderFields(schemaFields);
+      schemaFieldsContainer.innerHTML = ordered.map(f => {
         const type = (f.type || 'text').toLowerCase();
         const required = f.required ? 'required' : '';
         const keyAttr = `data-key="${escapeHtml(f.key)}" data-type="${escapeHtml(type)}"`;
+        const label = escapeHtml(f.label || f.key);
         if(type === 'textarea'){
-          return `<p><label>${escapeHtml(f.label || f.key)}<textarea ${keyAttr} ${required}></textarea></label></p>`;
-        } else if(type === 'select' && Array.isArray(f.options)) {
+          return `<p><label>${label}<textarea ${keyAttr} ${required}></textarea></label></p>`;
+        } else if((type === 'select' || type === 'dropdown') && Array.isArray(f.options)) {
           const opts = f.options.map(o => `<option value="${escapeHtml(String(o))}">${escapeHtml(String(o))}</option>`).join('');
-          return `<p><label>${escapeHtml(f.label || f.key)}<select ${keyAttr} ${required}>${opts}</select></label></p>`;
+          return `<p><label>${label}<select ${keyAttr} ${required}>${opts}</select></label></p>`;
         } else if(type === 'checkbox') {
-          return `<p><label><input type="checkbox" ${keyAttr}> ${escapeHtml(f.label || f.key)}</label></p>`;
+          return `<p><label><input type="checkbox" ${keyAttr}> ${label}</label></p>`;
+        } else if(type === 'number') {
+          return `<p><label>${label}<input type="number" ${keyAttr} ${required}></label></p>`;
         } else {
-          return `<p><label>${escapeHtml(f.label || f.key)}<input type="text" ${keyAttr} ${required}></label></p>`;
+          return `<p><label>${label}<input type="text" ${keyAttr} ${required}></label></p>`;
         }
       }).join('');
       schemaFieldsContainer.classList.remove('hidden');
@@ -346,8 +412,13 @@ function getAutoKeys(items){
       { key: 'created_at', label: 'Date added', type: 'date' },
     ];
     if(schemaFields && schemaFields.length){
-      const visibleFields = schemaFields.filter(f => f.showInTable !== false);
-      visibleFields.forEach(f => cols.push({ key: f.key, label: f.label || f.key }));
+      const visibleFields = orderFields(schemaFields.filter(f => f.showInTable !== false));
+      visibleFields.forEach(f => cols.push({
+        key: f.key,
+        label: f.label || f.key,
+        type: f.type,
+        options: Array.isArray(f.options) ? f.options : undefined,
+      }));
     } else {
       const autoKeys = getAutoKeys(items);
       autoKeys.forEach(k => cols.push({ key: k, label: k }));
@@ -676,7 +747,15 @@ function getAutoKeys(items){
           cells.push(`<td>${escapeHtml(formatDateTime(it.created_at))}</td>`);
         } else {
           const val = it.data && typeof it.data === 'object' ? it.data[col.key] : undefined;
-          cells.push(`<td>${formatCellValue(val)}</td>`);
+          if((col.type || '').toLowerCase() === 'dropdown' && Array.isArray(col.options)){
+            const opts = [...new Set(col.options.map(o => String(o)))];
+            const currentVal = val === undefined || val === null ? '' : String(val);
+            if(currentVal && !opts.includes(currentVal)) opts.unshift(currentVal);
+            const optionsHtml = ['<option value="">Select…</option>', ...opts.map(o => `<option value="${escapeHtml(String(o))}"${o === currentVal ? ' selected' : ''}>${escapeHtml(String(o))}</option>`)].join('');
+            cells.push(`<td><select class="inline-dropdown" data-inline-dropdown data-item-id="${escapeHtml(it.id)}" data-col-key="${escapeHtml(col.key)}" data-prev="${escapeHtml(currentVal)}">${optionsHtml}</select></td>`);
+          } else {
+            cells.push(`<td>${formatCellValue(val)}</td>`);
+          }
         }
       }
       const viewHref = `/item.html?account=${encodeURIComponent(accountId)}&section=${encodeURIComponent(slug)}&item=${encodeURIComponent(it.id)}`;
@@ -697,6 +776,36 @@ function getAutoKeys(items){
           sortState = { key, direction: key === 'created_at' ? 'desc' : 'asc' };
         }
         renderItemsTable();
+      });
+    });
+
+    const dropdowns = itemsTableContainer.querySelectorAll('[data-inline-dropdown]');
+    dropdowns.forEach(select => {
+      select.addEventListener('change', async () => {
+        const itemId = select.getAttribute('data-item-id');
+        const key = select.getAttribute('data-col-key');
+        const prev = select.getAttribute('data-prev') || '';
+        if(!itemId || !key) return;
+        const nextVal = select.value;
+        select.disabled = true;
+        try {
+          const item = itemsData.find(i => i.id === itemId);
+          if(!item) throw new Error('Item not found');
+          const updatedData = { ...(item.data || {}) };
+          updatedData[key] = nextVal;
+          const updated = await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`, {
+            method: 'PUT',
+            body: JSON.stringify({ name: item.name || '', data: updatedData }),
+          });
+          item.data = updated?.data || updatedData;
+          select.setAttribute('data-prev', nextVal);
+          renderItemsTable();
+        } catch(err){
+          select.value = prev;
+          alert(err.message || 'Failed to update value');
+        } finally {
+          select.disabled = false;
+        }
       });
     });
   }
