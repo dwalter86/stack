@@ -1,28 +1,57 @@
 <!doctype html><html><head>
-    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Item column settings</title>
-    <link rel="stylesheet" href="/app.css">
-  </head><body>
-    <header id="site-header"></header>
-    <main class="page-container">
-      <div class="account-header">
-        <div class="account-header-main">
-          <a class="btnBack" href="#" id="backToSection">Back</a>
-          <div>
-            <h1 id="settingsTitle">Column settings</h1>
-            <p class="small" id="settingsMeta"></p>
-          </div>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Item column settings</title>
+  <link rel="stylesheet" href="/app.css">
+</head><body>
+  <header id="site-header"></header>
+  <main class="page-container">
+    <div class="account-header">
+      <div class="account-header-main">
+        <a class="btnBack" href="#" id="backToSection">Back</a>
+        <div>
+          <h1 id="settingsTitle">Column settings</h1>
+          <p class="small" id="settingsMeta"></p>
         </div>
       </div>
-  
-      <section class="card">
-        <p class="small">Choose which columns should appear in the items table for this section. Changes do not affect the item detail view.</p>
-        <div id="columnsList" class="stacked-list"></div>
+    </div>
+
+    <section class="card">
+      <h2>Column template</h2>
+      <p class="small">Provide a JSON template describing the columns for this section. Save the template to refresh the column list.</p>
+      <label for="templateInput" class="small">Template JSON</label>
+      <textarea id="templateInput" rows="12" spellcheck="false"></textarea>
+      <p class="small">Example template:</p>
+      <pre id="templateExample"></pre>
+      <div class="actions" style="justify-content:flex-start;">
+        <button class="btn" id="saveTemplateBtn" type="button">Save template</button>
+      </div>
+      <p class="small" id="templateMessage"></p>
+    </section>
+
+    <section class="card">
+      <h2>Column count</h2>
+      <p class="small">Adjust how many columns are visible by default in the items table.</p>
+      <form id="columnCountForm" class="stacked-list" style="margin-top:12px;">
+        <label for="columnCountInput">
+          Columns to display
+          <input id="columnCountInput" name="columnCount" type="number" min="1" placeholder="Number of columns">
+        </label>
         <div class="actions" style="justify-content:flex-start;">
-          <button class="btn" id="saveColumnsBtn">Save</button>
+          <button class="btn" type="submit">Save</button>
         </div>
-        <p class="small" id="saveMessage"></p>
-      </section>
-    </main>
-    <script type="module" src="/js/item_columns.js"></script>
-  </body></html>
+        <p class="small" id="columnCountMessage"></p>
+      </form>
+    </section>
+
+    <section class="card">
+      <p class="small">Choose which columns should appear in the items table for this section. Changes do not affect the item detail view.</p>
+      <div id="columnsList" class="stacked-list"></div>
+      <div class="actions" style="justify-content:flex-start;">
+        <button class="btn" id="saveColumnsBtn">Save</button>
+      </div>
+      <p class="small" id="saveMessage"></p>
+    </section>
+
+  </main>
+  <script type="module" src="/js/item_columns.js"></script>
+</body></html>
