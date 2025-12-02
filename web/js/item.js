@@ -67,6 +67,25 @@ function columnPrefKey(accountId, slug){
   return `columnPrefs:${accountId}:${slug||'default'}`;
 }
 
+function columnCountKey(accountId, slug){
+  return `columnCount:${accountId}:${slug||'default'}`;
+}
+
+function loadColumnCount(accountId, slug){
+  try {
+    const raw = localStorage.getItem(columnCountKey(accountId, slug));
+    if(!raw) return null;
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveColumnCount(accountId, slug, val){
+  localStorage.setItem(columnCountKey(accountId, slug), String(val));
+}
+
 function loadColumnPrefs(accountId, slug){
   try {
     const raw = localStorage.getItem(columnPrefKey(accountId, slug));
