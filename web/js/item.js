@@ -39,6 +39,36 @@ function renderArrayTable(arr){
   return `<table class="nested-table"><tbody>${rows}</tbody></table>`;
 }
 
+function isImageUrl(url){
+  try {
+    const parsed = new URL(url);
+    if(parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    const path = parsed.pathname.toLowerCase();
+    return ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'].some(ext => path.endsWith(ext));
+  } catch {
+    return false;
+  }
+}
+
+function extractImageUrls(str){
+  const urlPattern = /(https?:\/\/(?:(?!https?:\/\/)[^\s])+)/gi;
+  const matches = [];
+  let m;
+  while((m = urlPattern.exec(str))){
+    matches.push(m[1].replace(/[)\]\s.,;]+$/, ''));
+  }
+  return matches.filter(isImageUrl);
+}
+
+function renderImages(urls){
+  if(!urls.length) return '';
+  const images = urls.map(u => {
+    const safeUrl = escapeHtml(u);
+    return `<a class="item-image-link" href="${safeUrl}" target="_blank" rel="noopener noreferrer"><img class="item-image" src="${safeUrl}" alt="Item attachment"></a>`;
+  }).join('');
+  return `<div class="item-image-list">${images}</div>`;
+}
+
 function renderValueHtml(val){
   if(val === null || val === undefined){
     return '<span class="muted">(empty)</span>';
@@ -53,6 +83,15 @@ function renderValueHtml(val){
   }
 
   const str = String(val);
+  const imageUrls = extractImageUrls(str);
+  if(imageUrls.length){
+    const images = renderImages(imageUrls);
+    if(str.trim() === imageUrls[0] && imageUrls.length === 1){
+      return images;
+    }
+    return `${images}<div class="small">${escapeHtml(str)}</div>`;
+  }
+
   if(str.includes('\n')){
     return `<pre style="margin:0;white-space:pre-wrap;">${escapeHtml(str)}</pre>`;
   }

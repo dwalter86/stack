@@ -176,6 +176,24 @@ pre { background:#f4f4f4; padding:8px; border-radius:6px; overflow:auto; }
 .properties-table td {
   word-break:break-word;
 }
+.item-image-list {
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:4px;
+}
+.item-image-link {
+  display:inline-flex;
+}
+.item-image {
+  max-width:220px;
+  max-height:220px;
+  object-fit:contain;
+  border:1px solid var(--border);
+  border-radius:6px;
+  background:#f7f7f7;
+  padding:4px;
+}
 
 /* Key/value editor */
 .kv-table input {
