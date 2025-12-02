@@ -210,6 +210,21 @@ function getAutoKeys(items){
   return keys.slice(0, MAX_COLS);
 }
 
+function columnCountKey(accountId, slug){
+  return `columnCount:${accountId}:${slug||'default'}`;
+}
+
+function loadColumnCount(accountId, slug){
+  try {
+    const raw = localStorage.getItem(columnCountKey(accountId, slug));
+    if(!raw) return null;
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 (async () => {
   const me = await loadMeOrRedirect(); if(!me) return;
   renderShell(me);
@@ -279,6 +294,7 @@ function getAutoKeys(items){
   let itemsData = [];
   let columnDefs = [];
   let visibleColumns = [];
+  let columnCount = null;
   let sortState = { key: 'created_at', direction: 'desc' };
 
   async function loadSectionMeta(){
@@ -726,10 +742,18 @@ function getAutoKeys(items){
 
   function renderItemsTable(){
     const visibleSet = new Set(visibleColumns);
-    const activeColumns = columnDefs.filter(c => visibleSet.has(c.key));
+    let activeColumns = columnDefs.filter(c => visibleSet.has(c.key));
+    if(Number.isFinite(columnCount) && columnCount > 0){
+      activeColumns = activeColumns.slice(0, columnCount);
+    }
     if(!itemsData.length){
       itemsTableContainer.innerHTML = '';
       return;
+    }
+
+    if(activeColumns.length && !activeColumns.some(c => c.key === sortState.key)){
+      const fallback = activeColumns[0];
+      sortState = { key: fallback.key, direction: fallback.key === 'created_at' ? 'desc' : 'asc' };
     }
     
     const headerCells = activeColumns.map(col => {
@@ -819,6 +843,13 @@ function getAutoKeys(items){
       const stored = loadColumnPrefs(accountId, slug);
       const base = stored.length ? [...stored, ...columnDefs.map(c => c.key)] : columnDefs.map(c => c.key);
       visibleColumns = reconcileVisibility(columnDefs, base);
+      const rawCount = loadColumnCount(accountId, slug);
+      const maxCount = visibleColumns.length;
+      if(Number.isFinite(rawCount) && rawCount > 0){
+        columnCount = maxCount ? Math.min(rawCount, maxCount) : rawCount;
+      } else {
+        columnCount = null;
+      }
       const visibleSet = new Set(visibleColumns);
       if(!visibleSet.has(sortState.key)){
         const fallbackKey = visibleColumns[0] || 'created_at';

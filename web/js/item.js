@@ -63,6 +63,21 @@ function templatePrefKey(accountId, slug){
   return `columnTemplate:${accountId}:${slug||'default'}`;
 }
 
+function columnPrefKey(accountId, slug){
+  return `columnPrefs:${accountId}:${slug||'default'}`;
+}
+
+function loadColumnPrefs(accountId, slug){
+  try {
+    const raw = localStorage.getItem(columnPrefKey(accountId, slug));
+    if(!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function loadColumnTemplate(accountId, slug){
   try {
     const raw = localStorage.getItem(templatePrefKey(accountId, slug));
@@ -144,6 +159,10 @@ function formatDateTime(val){
   const itemPropsBody = document.getElementById('itemProperties');
   const itemRawStructured = document.getElementById('itemRawStructured');
   const itemRaw = document.getElementById('itemRaw');
+  const columnCountCard = document.getElementById('columnCountCard');
+  const columnCountForm = document.getElementById('columnCountForm');
+  const columnCountInput = document.getElementById('columnCountInput');
+  const columnCountMessage = document.getElementById('columnCountMessage');
 
   if(!accountId || !itemId){
     document.body.innerHTML = '<main class="container"><p>Missing account or item id.</p></main>';
@@ -181,6 +200,31 @@ function formatDateTime(val){
       section = null;
       schemaFields = [];
       templateFields = [];
+    }
+
+    const storedCount = loadColumnCount(accountId, sectionSlug);
+    const visiblePref = loadColumnPrefs(accountId, sectionSlug);
+    const fallbackCount = visiblePref.length ? visiblePref.length : null;
+    const initialCount = Number.isFinite(storedCount) ? storedCount : fallbackCount;
+    if(columnCountCard){
+      columnCountCard.style.display = 'block';
+      if(columnCountInput && initialCount){
+        columnCountInput.value = initialCount;
+      }
+      if(columnCountForm){
+        columnCountForm.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          if(!columnCountInput) return;
+          columnCountMessage.textContent = '';
+          const parsed = parseInt(columnCountInput.value, 10);
+          if(!Number.isFinite(parsed) || parsed < 1){
+            columnCountMessage.textContent = 'Enter a number of columns (minimum 1).';
+            return;
+          }
+          saveColumnCount(accountId, sectionSlug, parsed);
+          columnCountMessage.textContent = 'Saved. Refresh the section to apply this column count.';
+        });
+      }
     }
   }
 

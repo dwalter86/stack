@@ -31,6 +31,25 @@ function saveColumnPrefs(accountId, slug, keys){
   localStorage.setItem(prefKey(accountId, slug), JSON.stringify(keys));
 }
 
+function columnCountKey(accountId, slug){
+  return `columnCount:${accountId}:${slug||'default'}`;
+}
+
+function loadColumnCount(accountId, slug){
+  try {
+    const raw = localStorage.getItem(columnCountKey(accountId, slug));
+    if(!raw) return null;
+    const num = parseInt(raw, 10);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveColumnCount(accountId, slug, val){
+  localStorage.setItem(columnCountKey(accountId, slug), String(val));
+}
+
 function templatePrefKey(accountId, slug){
   return `columnTemplate:${accountId}:${slug||'default'}`;
 }
@@ -183,6 +202,9 @@ function reconcileVisibility(columns, stored){
   const columnsList = document.getElementById('columnsList');
   const saveBtn = document.getElementById('saveColumnsBtn');
   const saveMessage = document.getElementById('saveMessage');
+  const columnCountForm = document.getElementById('columnCountForm');
+  const columnCountInput = document.getElementById('columnCountInput');
+  const columnCountMessage = document.getElementById('columnCountMessage');
   const title = document.getElementById('settingsTitle');
   const templateInput = document.getElementById('templateInput');
   const templateExample = document.getElementById('templateExample');
@@ -243,6 +265,26 @@ function reconcileVisibility(columns, stored){
   let columns = buildColumns(items, schemaFields);
   const stored = loadColumnPrefs(accountId, slug);
   let visibleKeys = reconcileVisibility(columns, stored.length ? stored : columns.map(c => c.key));
+
+  const storedCount = loadColumnCount(accountId, slug);
+  const fallbackCount = visibleKeys.length ? visibleKeys.length : null;
+  const initialCount = Number.isFinite(storedCount) ? storedCount : fallbackCount;
+  if(columnCountInput && initialCount){
+    columnCountInput.value = initialCount;
+  }
+
+  columnCountForm?.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    if(!columnCountInput) return;
+    columnCountMessage.textContent = '';
+    const parsed = parseInt(columnCountInput.value, 10);
+    if(!Number.isFinite(parsed) || parsed < 1){
+      columnCountMessage.textContent = 'Enter a number of columns (minimum 1).';
+      return;
+    }
+    saveColumnCount(accountId, slug, parsed);
+    columnCountMessage.textContent = 'Saved. Return to the section to see your updated table.';
+  });
 
   function renderList(){
     if(!columns.length){
