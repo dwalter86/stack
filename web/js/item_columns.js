@@ -70,54 +70,72 @@ function saveTemplate(accountId, slug, tpl){
 
 const SAMPLE_TEMPLATE = {
   name: 'template',
-  data: {
-    dataname1: {
-      friendlyname: 'Contact',
+  fields: [
+    {
+      key: 'contact',
+      label: 'Contact',
       type: 'string',
       order: 1,
     },
-    dataname2: {
-      friendlyname: 'Amount',
+    {
+      key: 'amount',
+      label: 'Amount',
       type: 'number',
       order: 2,
     },
-    dataname3: {
-      friendlyname: 'Status',
+    {
+      key: 'status',
+      label: 'Status',
       type: 'dropdown',
       order: 3,
-      options: {
-        option1: 'Ready',
-        option2: 'Done',
-        option3: 'In Progress',
-      }
+      options: ['Ready', 'Done', 'In Progress'],
+    },
+  ]
+};
+
+function normalizeField(field, idx = 0){
+  if(!field || typeof field !== 'object') return null;
+  const key = field.key || field.name;
+  if(!key) return null;
+  const type = (field.type || 'string').toLowerCase();
+  const orderRaw = field.order;
+  const parsedOrder = typeof orderRaw === 'number' ? orderRaw : (typeof orderRaw === 'string' ? parseInt(orderRaw, 10) : null);
+  let options = [];
+  if(type === 'dropdown'){
+    if(Array.isArray(field.options)){
+      options = field.options.map(o => String(o));
+    } else if(field.options && typeof field.options === 'object'){
+      options = Object.values(field.options).map(o => String(o));
     }
   }
-};
+  return {
+    key,
+    label: field.label || field.friendlyname || key,
+    type,
+    options,
+    order: Number.isFinite(parsedOrder) ? parsedOrder : null,
+    index: idx,
+  };
+}
 
 function parseTemplate(tpl){
   if(!tpl || typeof tpl !== 'object') return { fields: [] };
+
+  if(Array.isArray(tpl.fields)){
+    const normalizedFields = tpl.fields.map((f, idx) => normalizeField(f, idx)).filter(Boolean);
+    normalizedFields.sort((a, b) => {
+      const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+      if(orderA !== orderB) return orderA - orderB;
+      return a.index - b.index;
+    });
+    return { fields: normalizedFields };
+  }
+
   const data = tpl.data && typeof tpl.data === 'object' ? tpl.data : {};
-  const fields = Object.entries(data).map(([key, val], idx) => {
-    const type = (val?.type || 'string').toLowerCase();
-    const orderRaw = val?.order;
-    const parsedOrder = typeof orderRaw === 'number' ? orderRaw : (typeof orderRaw === 'string' ? parseInt(orderRaw, 10) : null);
-    let options = [];
-    if(type === 'dropdown'){
-      if(Array.isArray(val?.options)){
-        options = val.options.map(o => String(o));
-      } else if(val?.options && typeof val.options === 'object'){
-        options = Object.values(val.options).map(o => String(o));
-      }
-    }
-    return {
-      key,
-      label: val?.friendlyname || key,
-      type,
-      options,
-      order: Number.isFinite(parsedOrder) ? parsedOrder : null,
-      index: idx,
-    };
-  });
+  const fields = Object.entries(data)
+    .map(([key, val], idx) => normalizeField({ key, ...(val || {}) }, idx))
+    .filter(Boolean);
 
   fields.sort((a, b) => {
     const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
@@ -138,6 +156,12 @@ function orderFields(fields){
     const labelB = b?.label || b?.key || '';
     return labelA.localeCompare(labelB, undefined, { sensitivity: 'base' });
   });
+}
+
+function fieldsToTemplate(slug, fields){
+  if(!fields || !fields.length) return null;
+  const cleaned = fields.map(({ index, ...rest }) => rest).filter(f => f && f.key);
+  return { name: slug || 'template', fields: cleaned };
 }
 
 function getAutoKeys(items){
@@ -228,14 +252,16 @@ function reconcileVisibility(columns, stored){
   const storedTemplate = loadTemplate(accountId, slug);
   const parsedTemplate = parseTemplate(storedTemplate);
   let schemaFields = parsedTemplate.fields || [];
+  let apiTemplate = null;
   try {
     const section = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`);
     const schema = section.schema || {};
-    const apiFields = Array.isArray(schema.fields) ? schema.fields : [];
+    const apiFields = parseTemplate(schema).fields || [];
     if(!schemaFields.length){
       schemaFields = apiFields;
     }
     sectionLabel = section.label || slug;
+    apiTemplate = fieldsToTemplate(slug, apiFields);
   } catch {
     if(!schemaFields.length){
       schemaFields = [];
@@ -258,7 +284,7 @@ function reconcileVisibility(columns, stored){
     templateExample.textContent = JSON.stringify(SAMPLE_TEMPLATE, null, 2);
   }
   if(templateInput){
-    const tplToShow = storedTemplate || SAMPLE_TEMPLATE;
+    const tplToShow = storedTemplate || apiTemplate || SAMPLE_TEMPLATE;
     templateInput.value = JSON.stringify(tplToShow, null, 2);
   }
 
@@ -337,15 +363,17 @@ function reconcileVisibility(columns, stored){
       const parsed = JSON.parse(raw);
       const normalized = parseTemplate(parsed);
       if(!normalized.fields.length){
-        templateMessage.textContent = 'Template must include at least one column inside the data object.';
+        templateMessage.textContent = 'Template must include at least one column (fields array or data object).';
         return;
       }
-      saveTemplate(accountId, slug, parsed);
+      const storedPayload = { name: slug, fields: normalized.fields.map(({ index, ...rest }) => rest) };
+      saveTemplate(accountId, slug, storedPayload);
       schemaFields = normalized.fields;
       columns = buildColumns(items, schemaFields);
       visibleKeys = reconcileVisibility(columns, columns.map(c => c.key));
       saveColumnPrefs(accountId, slug, visibleKeys);
       renderList();
+      templateInput.value = JSON.stringify(storedPayload, null, 2);
       templateMessage.textContent = 'Template saved. Column visibility was refreshed from the template.';
     } catch(err){
       templateMessage.textContent = `Could not parse JSON: ${err.message}`;

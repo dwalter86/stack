@@ -62,6 +62,43 @@ def save_preferences(db, user_id: str, labels: dict) -> dict:
   db.commit()
   return merged
 
+def normalize_section_schema(raw: dict | None) -> dict:
+  """Accept a flexible schema shape and store it as a fields array.
+
+  Existing clients send `{"fields": [...]}` already, but some callers
+  provide an object keyed by field name (e.g. {"name": {"type": ...}}).
+  Normalize both inputs so the stored schema always has a `fields` list
+  compatible with the UI expectations.
+  """
+  if not isinstance(raw, dict):
+    return {"fields": []}
+
+  raw_fields = raw.get("fields")
+  if isinstance(raw_fields, list):
+    normalized = []
+    for field in raw_fields:
+      if isinstance(field, dict) and field.get("key"):
+        normalized.append(field)
+    return {"fields": normalized}
+
+  normalized_fields = []
+  for key, val in raw.items():
+    if not isinstance(val, dict):
+      continue
+    field: dict = {"key": key}
+    label = val.get("label") or val.get("friendlyname")
+    if label:
+      field["label"] = label
+    if "type" in val:
+      field["type"] = val["type"]
+    if "options" in val:
+      field["options"] = val["options"]
+    if "order" in val:
+      field["order"] = val["order"]
+    normalized_fields.append(field)
+
+  return {"fields": normalized_fields}
+
 app = FastAPI(title="Multi-tenant JSON API")
 app.add_middleware(
   CORSMiddleware,
@@ -241,11 +278,11 @@ async def list_sections(account_id: str, user_id: str = Depends(current_user)):
       WHERE account_id = :a
       ORDER BY created_at
     """), {"a": account_id}).all()
-    return [SectionOut(id=r[0], slug=r[1], label=r[2], schema=r[3]) for r in rows]
+    return [SectionOut(id=r[0], slug=r[1], label=r[2], schema=normalize_section_schema(r[3])) for r in rows]
 
 @app.post("/api/accounts/{account_id}/sections", response_model=SectionOut, dependencies=[Depends(ip_allowlist)])
 async def create_section(account_id: str, body: SectionCreate, user_id: str = Depends(current_user)):
-  payload = json.dumps(body.schema or {})
+  payload = json.dumps(normalize_section_schema(body.schema))
   with SessionLocal() as db:
     row = db.execute(text("""
       INSERT INTO sections(account_id, slug, label, schema)
@@ -256,7 +293,7 @@ async def create_section(account_id: str, body: SectionCreate, user_id: str = De
       RETURNING id::text, slug, label, COALESCE(schema, '{}'::jsonb)
     """), {"a": account_id, "slug": body.slug, "label": body.label, "schema": payload}).first()
     db.commit()
-    return SectionOut(id=row[0], slug=row[1], label=row[2], schema=row[3])
+    return SectionOut(id=row[0], slug=row[1], label=row[2], schema=normalize_section_schema(row[3]))
 
 @app.get("/api/accounts/{account_id}/sections/{slug}", response_model=SectionOut, dependencies=[Depends(ip_allowlist)])
 async def get_section(account_id: str, slug: str, user_id: str = Depends(current_user)):
@@ -269,11 +306,11 @@ async def get_section(account_id: str, slug: str, user_id: str = Depends(current
     """), {"a": account_id, "s": slug}).first()
     if not row:
       raise HTTPException(status_code=404, detail="Section not found")
-    return SectionOut(id=row[0], slug=row[1], label=row[2], schema=row[3])
+    return SectionOut(id=row[0], slug=row[1], label=row[2], schema=normalize_section_schema(row[3]))
 
 @app.put("/api/accounts/{account_id}/sections/{slug}", response_model=SectionOut, dependencies=[Depends(ip_allowlist)])
 async def update_section(account_id: str, slug: str, body: SectionUpdate, user_id: str = Depends(current_user)):
-  payload = json.dumps(body.schema or {})
+  payload = json.dumps(normalize_section_schema(body.schema))
   with SessionLocal() as db:
     row = db.execute(text("""
       UPDATE sections
@@ -285,7 +322,7 @@ async def update_section(account_id: str, slug: str, body: SectionUpdate, user_i
     if not row:
       raise HTTPException(status_code=404, detail="Section not found")
     db.commit()
-    return SectionOut(id=row[0], slug=row[1], label=row[2], schema=row[3])
+    return SectionOut(id=row[0], slug=row[1], label=row[2], schema=normalize_section_schema(row[3]))
 
 @app.delete("/api/accounts/{account_id}/sections/{slug}", dependencies=[Depends(ip_allowlist)])
 async def delete_section(account_id: str, slug: str, user_id: str = Depends(current_user)):

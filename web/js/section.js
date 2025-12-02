@@ -106,6 +106,16 @@ function normalizeExportValue(val){
   return String(val);
 }
 
+function normalizeOptions(raw){
+  if(Array.isArray(raw)){
+    return raw.map(o => String(o));
+  }
+  if(raw && typeof raw === 'object'){
+    return Object.values(raw).map(o => String(o));
+  }
+  return [];
+}
+
 function columnPrefKey(accountId, slug){
   return `columnPrefs:${accountId}:${slug||'default'}`;
 }
@@ -355,10 +365,11 @@ function loadColumnCount(accountId, slug){
         const required = f.required ? 'required' : '';
         const keyAttr = `data-key="${escapeHtml(f.key)}" data-type="${escapeHtml(type)}"`;
         const label = escapeHtml(f.label || f.key);
+        const options = normalizeOptions(f.options);
         if(type === 'textarea'){
           return `<p><label>${label}<textarea ${keyAttr} ${required}></textarea></label></p>`;
-        } else if((type === 'select' || type === 'dropdown') && Array.isArray(f.options)) {
-          const opts = f.options.map(o => `<option value="${escapeHtml(String(o))}">${escapeHtml(String(o))}</option>`).join('');
+        } else if((type === 'select' || type === 'dropdown') && options.length) {
+          const opts = options.map(o => `<option value="${escapeHtml(String(o))}">${escapeHtml(String(o))}</option>`).join('');
           return `<p><label>${label}<select ${keyAttr} ${required}>${opts}</select></label></p>`;
         } else if(type === 'checkbox') {
           return `<p><label><input type="checkbox" ${keyAttr}> ${label}</label></p>`;
@@ -433,7 +444,7 @@ function loadColumnCount(accountId, slug){
         key: f.key,
         label: f.label || f.key,
         type: f.type,
-        options: Array.isArray(f.options) ? f.options : undefined,
+        options: normalizeOptions(f.options),
       }));
     } else {
       const autoKeys = getAutoKeys(items);
@@ -771,12 +782,16 @@ function loadColumnCount(accountId, slug){
           cells.push(`<td>${escapeHtml(formatDateTime(it.created_at))}</td>`);
         } else {
           const val = it.data && typeof it.data === 'object' ? it.data[col.key] : undefined;
-          if((col.type || '').toLowerCase() === 'dropdown' && Array.isArray(col.options)){
-            const opts = [...new Set(col.options.map(o => String(o)))];
+          if((col.type || '').toLowerCase() === 'dropdown'){
+            const opts = [...new Set(normalizeOptions(col.options))];
             const currentVal = val === undefined || val === null ? '' : String(val);
-            if(currentVal && !opts.includes(currentVal)) opts.unshift(currentVal);
-            const optionsHtml = ['<option value="">Select…</option>', ...opts.map(o => `<option value="${escapeHtml(String(o))}"${o === currentVal ? ' selected' : ''}>${escapeHtml(String(o))}</option>`)].join('');
-            cells.push(`<td><select class="inline-dropdown" data-inline-dropdown data-item-id="${escapeHtml(it.id)}" data-col-key="${escapeHtml(col.key)}" data-prev="${escapeHtml(currentVal)}">${optionsHtml}</select></td>`);
+            if(opts.length){
+              if(currentVal && !opts.includes(currentVal)) opts.unshift(currentVal);
+              const optionsHtml = ['<option value="">Select…</option>', ...opts.map(o => `<option value="${escapeHtml(String(o))}"${o === currentVal ? ' selected' : ''}>${escapeHtml(String(o))}</option>`)].join('');
+              cells.push(`<td><select class="inline-dropdown" data-inline-dropdown data-item-id="${escapeHtml(it.id)}" data-col-key="${escapeHtml(col.key)}" data-prev="${escapeHtml(currentVal)}">${optionsHtml}</select></td>`);
+            } else {
+              cells.push(`<td>${formatCellValue(val)}</td>`);
+            }
           } else {
             cells.push(`<td>${formatCellValue(val)}</td>`);
           }
