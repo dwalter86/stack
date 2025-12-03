@@ -145,30 +145,50 @@ function loadColumnTemplate(accountId, slug){
   }
 }
 
+function normalizeField(field, idx = 0){
+  if(!field || typeof field !== 'object') return null;
+  const key = field.key || field.name;
+  if(!key) return null;
+  const type = (field.type || 'string').toLowerCase();
+  const orderRaw = field.order;
+  const parsedOrder = typeof orderRaw === 'number' ? orderRaw : (typeof orderRaw === 'string' ? parseInt(orderRaw, 10) : null);
+  let options = [];
+  if(type === 'dropdown' || type === 'select'){
+    if(Array.isArray(field.options)){
+      options = field.options.map(o => String(o));
+    } else if(field.options && typeof field.options === 'object'){
+      options = Object.values(field.options).map(o => String(o));
+    }
+  }
+  return {
+    key,
+    label: field.label || field.friendlyname || key,
+    type,
+    options,
+    order: Number.isFinite(parsedOrder) ? parsedOrder : null,
+    index: idx,
+    required: field.required,
+  };
+}
+
 function parseTemplate(tpl){
   if(!tpl || typeof tpl !== 'object') return { fields: [] };
+
+  if(Array.isArray(tpl.fields)){
+    const normalizedFields = tpl.fields.map((f, idx) => normalizeField(f, idx)).filter(Boolean);
+    normalizedFields.sort((a, b) => {
+      const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+      if(orderA !== orderB) return orderA - orderB;
+      return a.index - b.index;
+    });
+    return { fields: normalizedFields };
+  }
+
   const data = tpl.data && typeof tpl.data === 'object' ? tpl.data : {};
-  const fields = Object.entries(data).map(([key, val], idx) => {
-    const type = (val?.type || 'string').toLowerCase();
-    const orderRaw = val?.order;
-    const parsedOrder = typeof orderRaw === 'number' ? orderRaw : (typeof orderRaw === 'string' ? parseInt(orderRaw, 10) : null);
-    let options = [];
-    if(type === 'dropdown'){
-      if(Array.isArray(val?.options)){
-        options = val.options.map(o => String(o));
-      } else if(val?.options && typeof val.options === 'object'){
-        options = Object.values(val.options).map(o => String(o));
-      }
-    }
-    return {
-      key,
-      label: val?.friendlyname || key,
-      type,
-      options,
-      order: Number.isFinite(parsedOrder) ? parsedOrder : null,
-      index: idx,
-    };
-  });
+  const fields = Object.entries(data)
+    .map(([key, val], idx) => normalizeField({ key, ...(val || {}) }, idx))
+    .filter(Boolean);
 
   fields.sort((a, b) => {
     const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
