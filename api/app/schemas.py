@@ -44,6 +44,10 @@ class ItemCreate(BaseModel):
     name: str
     data: dict = Field(default_factory=dict)
 
+class ItemUpdate(BaseModel):
+    name: Optional[str] = None
+    data: Optional[dict] = None
+
 class ItemOut(BaseModel):
     id: str
     name: str

@@ -22,6 +22,7 @@ from schemas import (
     PreferencesUpdate,
     CommentCreate,
     CommentOut,
+    ItemUpdate,
 )
 from auth import login_and_get_user, create_token, memberships_for_user
 from deps import current_user, ip_allowlist, require_admin
@@ -357,7 +358,10 @@ async def get_item(account_id: str, item_id: str, user_id: str = Depends(current
   return ItemOut(id=item["id"], name=item["name"], data=item["data"], created_at=item["created_at"])
 
 @app.put("/api/accounts/{account_id}/items/{item_id}", response_model=ItemOut, dependencies=[Depends(ip_allowlist)])
-async def update_item(account_id: str, item_id: str, body: ItemCreate, user_id: str = Depends(current_user)):
+async def update_item(account_id: str, item_id: str, body: ItemUpdate, user_id: str = Depends(current_user)):
+  if body.name is None and body.data is None:
+    raise HTTPException(status_code=400, detail="At least one field must be provided for update")
+
   updated = rls.update_item(account_id, item_id, name=body.name, data=body.data)
   if not updated:
     raise HTTPException(status_code=404, detail="Item not found")

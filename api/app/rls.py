@@ -44,24 +44,36 @@ def create_item(account_id: str, section: str, name: str, data: dict):
 
 def update_item(account_id: str, item_id: str, name: str | None, data: dict | None):
   schema = _schema_name(account_id)
-  sets = []
   params: dict = {"id": item_id}
-  if name is not None:
-    sets.append("name = :n")
-    params["n"] = name
-  if data is not None:
-    sets.append("data = CAST(:d AS jsonb)")
-    params["d"] = json.dumps(data)
-  if not sets:
-    return None
-  sql = f"""
-  UPDATE {schema}.items
-  SET {', '.join(sets)}
-  WHERE id = :id
-  RETURNING id::text, name, data, created_at
-  """
+  sets = []
+
   with SessionLocal() as db:
     db.execute(set_current_account(account_id))
+
+    if data is not None:
+      current_row = db.execute(text(f"SELECT COALESCE(data, '{{}}'::jsonb) FROM {schema}.items WHERE id = :id"), params).first()
+      if not current_row:
+        return None
+      current_data = current_row[0] if isinstance(current_row[0], dict) else {}
+      merged_data = dict(current_data)
+      merged_data.update(data)
+      sets.append("data = CAST(:d AS jsonb)")
+      params["d"] = json.dumps(merged_data)
+
+    if name is not None:
+      sets.append("name = :n")
+      params["n"] = name
+
+    if not sets:
+      return None
+
+    sql = f"""
+    UPDATE {schema}.items
+    SET {', '.join(sets)}
+    WHERE id = :id
+    RETURNING id::text, name, data, created_at
+    """
+
     row = db.execute(text(sql), params).first()
     db.commit()
     if not row:
