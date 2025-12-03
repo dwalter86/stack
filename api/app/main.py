@@ -394,7 +394,13 @@ async def create_item_comment(account_id: str, item_id: str, body: CommentCreate
     user_row = db.execute(text("SELECT COALESCE(name, email) FROM users WHERE id = :u"), {"u": user_id}).first()
     if not user_row:
       raise HTTPException(status_code=403, detail="User not found")
-    user_name = user_row[0]
+    default_user_name = user_row[0]
+
+  user_name = None
+  if body.user_name is not None:
+    user_name = body.user_name.strip()
+  if not user_name:
+    user_name = default_user_name
 
   comment = body.comment.strip()
   if not comment:

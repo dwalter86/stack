@@ -96,6 +96,7 @@ class SectionOut(SectionBase):
 
 class CommentCreate(BaseModel):
     comment: str
+    user_name: Optional[str] = None
 
 class CommentOut(BaseModel):
     id: str
