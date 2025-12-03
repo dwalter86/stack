@@ -827,10 +827,18 @@ function loadColumnCount(accountId, slug){
       }
       const viewHref = `/item.html?account=${encodeURIComponent(accountId)}&section=${encodeURIComponent(slug)}&item=${encodeURIComponent(it.id)}`;
       const commentsHref = `/comments.html?account_id=${encodeURIComponent(accountId)}&item_id=${encodeURIComponent(it.id)}&section_slug=${encodeURIComponent(slug)}`;
+      const commentCount = Number.isFinite(it.comment_count) ? it.comment_count : 0;
+      const commentCountText = commentCount === 1 ? '1 comment' : `${commentCount} comments`;
+      const commentCountClass = commentCount > 0 ? 'comment-count comment-count--active' : 'comment-count';
+      const commentsBtn = `<a class="btn small comment-btn" href="${commentsHref}" aria-label="View ${escapeHtml(commentCountText)}">` +
+        `<span class="comment-icon" aria-hidden="true">💬</span>` +
+        `<span class="comment-label">Comments</span>` +
+        `<span class="${commentCountClass}" aria-hidden="true">${escapeHtml(String(commentCount))}</span>` +
+      `</a>`;
       const deleteBtn = `<button type="button" class="btn small danger" data-action="delete-item" data-item-id="${escapeHtml(it.id)}">Delete</button>`;
       cells.push(`<td style="width:1%;white-space:nowrap;">` +
         `<a class="btn small" href="${viewHref}">View</a> ` +
-        `<a class="btn small" href="${commentsHref}">Comments</a> ` +
+        `${commentsBtn} ` +
         `${deleteBtn}` +
       `</td>`);
       return `<tr>${cells.join('')}</tr>`;

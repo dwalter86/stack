@@ -11,22 +11,34 @@ def _schema_name(account_id: str) -> str:
 
 def list_items(account_id: str, section: str, limit: int = 50, cursor: str | None = None):
   schema = _schema_name(account_id)
-  where = "WHERE section_slug = :section"
+  where = "WHERE i.section_slug = :section"
   params: dict = {"limit": limit, "section": section}
   if cursor:
-    where += " AND id > :cursor"
+    where += " AND i.id > :cursor"
     params["cursor"] = cursor
   sql = f"""
-  SELECT id::text, name, COALESCE(data, '{{}}'::jsonb), created_at
-  FROM {schema}.items
+  SELECT
+    i.id::text,
+    i.name,
+    COALESCE(i.data, '{{}}'::jsonb) AS data,
+    i.created_at,
+    COALESCE((
+      SELECT COUNT(*)::int
+      FROM {schema}.comments c
+      WHERE c.item_id = i.id
+    ), 0) AS comment_count
+  FROM {schema}.items AS i
   {where}
-  ORDER BY id
+  ORDER BY i.id
   LIMIT :limit
   """
   with SessionLocal() as db:
     db.execute(set_current_account(account_id))
     rows = db.execute(text(sql), params).all()
-    return [{"id": r[0], "name": r[1], "data": r[2], "created_at": r[3]} for r in rows]
+    return [
+      {"id": r[0], "name": r[1], "data": r[2], "created_at": r[3], "comment_count": r[4]}
+      for r in rows
+    ]
 
 def create_item(account_id: str, section: str, name: str, data: dict):
   schema = _schema_name(account_id)

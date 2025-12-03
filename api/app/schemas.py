@@ -53,6 +53,7 @@ class ItemOut(BaseModel):
     name: str
     data: dict
     created_at: datetime
+    comment_count: int = 0
 
 class ItemsPage(BaseModel):
     items: List[ItemOut]
