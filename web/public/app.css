@@ -142,6 +142,18 @@ pre { background:#f4f4f4; padding:8px; border-radius:6px; overflow:auto; }
   border:1px solid var(--border);
   padding:6px 10px;
 }
+.btn.danger {
+  color:#b00020;
+  border:1px solid #f3b1b9;
+  background:#fff7f7;
+}
+.btn.danger:hover {
+  background:#ffe3e6;
+}
+.btn.danger:disabled {
+  opacity:.65;
+  cursor:not-allowed;
+}
 .hidden { display:none !important; }
 
 .empty-state {

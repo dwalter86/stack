@@ -759,8 +759,16 @@ function loadColumnCount(accountId, slug){
     }
     if(!itemsData.length){
       itemsTableContainer.innerHTML = '';
+      if(itemsEmptyState){
+        itemsEmptyState.classList.remove('hidden');
+      }
+      setExportEnabled(false);
       return;
     }
+    if(itemsEmptyState){
+      itemsEmptyState.classList.add('hidden');
+    }
+    setExportEnabled(true);
 
     if(activeColumns.length && !activeColumns.some(c => c.key === sortState.key)){
       const fallback = activeColumns[0];
@@ -799,7 +807,12 @@ function loadColumnCount(accountId, slug){
       }
       const viewHref = `/item.html?account=${encodeURIComponent(accountId)}&section=${encodeURIComponent(slug)}&item=${encodeURIComponent(it.id)}`;
       const commentsHref = `/comments.html?account_id=${encodeURIComponent(accountId)}&item_id=${encodeURIComponent(it.id)}&section_slug=${encodeURIComponent(slug)}`;
-      cells.push(`<td style="width:1%;white-space:nowrap;"><a class="btn small" href="${viewHref}">View</a> <a class="btn small" href="${commentsHref}">Comments</a></td>`);
+      const deleteBtn = `<button type="button" class="btn small danger" data-action="delete-item" data-item-id="${escapeHtml(it.id)}">Delete</button>`;
+      cells.push(`<td style="width:1%;white-space:nowrap;">` +
+        `<a class="btn small" href="${viewHref}">View</a> ` +
+        `<a class="btn small" href="${commentsHref}">Comments</a> ` +
+        `${deleteBtn}` +
+      `</td>`);
       return `<tr>${cells.join('')}</tr>`;
     }).join('');
 
@@ -844,6 +857,38 @@ function loadColumnCount(accountId, slug){
           alert(err.message || 'Failed to update value');
         } finally {
           select.disabled = false;
+        }
+      });
+    });
+
+    const deleteButtons = itemsTableContainer.querySelectorAll('button[data-action="delete-item"]');
+    deleteButtons.forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const itemId = btn.getAttribute('data-item-id');
+        if(!itemId) return;
+        const matchedItem = itemsData.find(item => item.id === itemId);
+        const itemName = matchedItem?.name?.trim() || '';
+        const labelSource = (labels.items_label || 'Items').trim();
+        const singularLabel = labelSource.toLowerCase().endsWith('s') && labelSource.length > 1
+          ? labelSource.slice(0, -1)
+          : labelSource;
+        const fallbackTarget = `this ${singularLabel.toLowerCase() || 'item'}`;
+        const promptTarget = itemName ? `"${itemName}"` : fallbackTarget;
+        const shouldDelete = confirm(`Delete ${promptTarget}? This cannot be undone.`);
+        if(!shouldDelete){
+          return;
+        }
+        const previousText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Deleting…';
+        try {
+          await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`, { method:'DELETE' });
+          itemsData = itemsData.filter(item => item.id !== itemId);
+          renderItemsTable();
+        } catch(err){
+          alert(err.message || 'Failed to delete item');
+          btn.disabled = false;
+          btn.textContent = previousText;
         }
       });
     });
