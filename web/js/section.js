@@ -1,31 +1,24 @@
-import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences } from './common.js';
+import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences, escapeHtml } from './common.js';
 
-function qs(name){
+function qs(name) {
   const m = new URLSearchParams(location.search).get(name);
   return m && decodeURIComponent(m);
 }
 
-function escapeHtml(str){
-  return String(str ?? '')
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;');
-}
-
-function renderObjectTable(obj){
+function renderObjectTable(obj) {
   const entries = Object.entries(obj || {});
-  if(!entries.length) return '<span class="muted">{}</span>';
+  if (!entries.length) return '<span class="muted">{}</span>';
   const rows = entries.map(([k, v]) => `<tr><th>${escapeHtml(k)}</th><td>${renderStructuredValue(v)}</td></tr>`).join('');
   return `<table class="nested-table"><tbody>${rows}</tbody></table>`;
 }
 
-function renderArrayTable(arr){
-  if(!arr.length) return '<span class="muted">[]</span>';
+function renderArrayTable(arr) {
+  if (!arr.length) return '<span class="muted">[]</span>';
 
   const objectRows = arr.every(v => v && typeof v === 'object' && !Array.isArray(v));
-  if(objectRows){
+  if (objectRows) {
     const keys = Array.from(new Set(arr.flatMap(v => Object.keys(v || {}))));
-    if(keys.length){
+    if (keys.length) {
       const header = `<tr><th></th>${keys.map(k => `<th>${escapeHtml(k)}</th>`).join('')}</tr>`;
       const rows = arr.map((v, idx) => {
         const cells = keys.map(k => `<td>${renderStructuredValue((v || {})[k])}</td>`).join('');
@@ -39,29 +32,29 @@ function renderArrayTable(arr){
   return `<table class="nested-table"><tbody>${rows}</tbody></table>`;
 }
 
-function renderStructuredValue(val){
-  if(val === null || val === undefined){
+function renderStructuredValue(val) {
+  if (val === null || val === undefined) {
     return '<span class="muted">(empty)</span>';
   }
 
-  if(Array.isArray(val)){
+  if (Array.isArray(val)) {
     return renderArrayTable(val);
   }
 
-  if(typeof val === 'object'){
+  if (typeof val === 'object') {
     return renderObjectTable(val);
   }
 
   const str = String(val);
-  if(str.includes('\n')){
+  if (str.includes('\n')) {
     return `<pre style="margin:0;white-space:pre-wrap;">${escapeHtml(str)}</pre>`;
   }
   return escapeHtml(str);
 }
 
-function formatCellValue(val){
-  if(val === null || val === undefined) return '';
-  if(typeof val === 'object'){
+function formatCellValue(val) {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'object') {
     const isArray = Array.isArray(val);
     const summary = isArray
       ? `Array (${val.length})`
@@ -71,9 +64,9 @@ function formatCellValue(val){
   return escapeHtml(String(val));
 }
 
-function parseLooseValue(str){
+function parseLooseValue(str) {
   const trimmed = str.trim();
-  if(!trimmed) return '';
+  if (!trimmed) return '';
   // Try JSON parse for structured/typed values
   try {
     return JSON.parse(trimmed);
@@ -82,8 +75,8 @@ function parseLooseValue(str){
   }
 }
 
-function formatDateTime(val){
-  if(!val) return '';
+function formatDateTime(val) {
+  if (!val) return '';
   try {
     return new Date(val).toLocaleString();
   } catch {
@@ -91,12 +84,12 @@ function formatDateTime(val){
   }
 }
 
-function normalizeExportValue(val){
-  if(val === null || val === undefined) return '';
-  if(val instanceof Date){
+function normalizeExportValue(val) {
+  if (val === null || val === undefined) return '';
+  if (val instanceof Date) {
     return val.toISOString();
   }
-  if(typeof val === 'object'){
+  if (typeof val === 'object') {
     try {
       return JSON.stringify(val);
     } catch {
@@ -106,24 +99,24 @@ function normalizeExportValue(val){
   return String(val);
 }
 
-function normalizeOptions(raw){
-  if(Array.isArray(raw)){
+function normalizeOptions(raw) {
+  if (Array.isArray(raw)) {
     return raw.map(o => String(o));
   }
-  if(raw && typeof raw === 'object'){
+  if (raw && typeof raw === 'object') {
     return Object.values(raw).map(o => String(o));
   }
   return [];
 }
 
-function columnPrefKey(accountId, slug){
-  return `columnPrefs:${accountId}:${slug||'default'}`;
+function columnPrefKey(accountId, slug) {
+  return `columnPrefs:${accountId}:${slug || 'default'}`;
 }
 
-function loadColumnPrefs(accountId, slug){
+function loadColumnPrefs(accountId, slug) {
   try {
     const raw = localStorage.getItem(columnPrefKey(accountId, slug));
-    if(!raw) return [];
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -131,32 +124,32 @@ function loadColumnPrefs(accountId, slug){
   }
 }
 
-function templatePrefKey(accountId, slug){
-  return `columnTemplate:${accountId}:${slug||'default'}`;
+function templatePrefKey(accountId, slug) {
+  return `columnTemplate:${accountId}:${slug || 'default'}`;
 }
 
-function loadColumnTemplate(accountId, slug){
+function loadColumnTemplate(accountId, slug) {
   try {
     const raw = localStorage.getItem(templatePrefKey(accountId, slug));
-    if(!raw) return null;
+    if (!raw) return null;
     return JSON.parse(raw);
   } catch {
     return null;
   }
 }
 
-function normalizeField(field, idx = 0){
-  if(!field || typeof field !== 'object') return null;
+function normalizeField(field, idx = 0) {
+  if (!field || typeof field !== 'object') return null;
   const key = field.key || field.name;
-  if(!key) return null;
+  if (!key) return null;
   const type = (field.type || 'string').toLowerCase();
   const orderRaw = field.order;
   const parsedOrder = typeof orderRaw === 'number' ? orderRaw : (typeof orderRaw === 'string' ? parseInt(orderRaw, 10) : null);
   let options = [];
-  if(type === 'dropdown' || type === 'select'){
-    if(Array.isArray(field.options)){
+  if (type === 'dropdown' || type === 'select') {
+    if (Array.isArray(field.options)) {
       options = field.options.map(o => String(o));
-    } else if(field.options && typeof field.options === 'object'){
+    } else if (field.options && typeof field.options === 'object') {
       options = Object.values(field.options).map(o => String(o));
     }
   }
@@ -171,15 +164,15 @@ function normalizeField(field, idx = 0){
   };
 }
 
-function parseTemplate(tpl){
-  if(!tpl || typeof tpl !== 'object') return { fields: [] };
+function parseTemplate(tpl) {
+  if (!tpl || typeof tpl !== 'object') return { fields: [] };
 
-  if(Array.isArray(tpl.fields)){
+  if (Array.isArray(tpl.fields)) {
     const normalizedFields = tpl.fields.map((f, idx) => normalizeField(f, idx)).filter(Boolean);
     normalizedFields.sort((a, b) => {
       const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
       const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
-      if(orderA !== orderB) return orderA - orderB;
+      if (orderA !== orderB) return orderA - orderB;
       return a.index - b.index;
     });
     return { fields: normalizedFields };
@@ -193,46 +186,46 @@ function parseTemplate(tpl){
   fields.sort((a, b) => {
     const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
     const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
-    if(orderA !== orderB) return orderA - orderB;
+    if (orderA !== orderB) return orderA - orderB;
     return a.index - b.index;
   });
 
   return { fields };
 }
 
-function orderFields(fields){
+function orderFields(fields) {
   return [...(fields || [])].sort((a, b) => {
     const orderA = a?.order ?? Number.MAX_SAFE_INTEGER;
     const orderB = b?.order ?? Number.MAX_SAFE_INTEGER;
-    if(orderA !== orderB) return orderA - orderB;
+    if (orderA !== orderB) return orderA - orderB;
     const labelA = a?.label || a?.key || '';
     const labelB = b?.label || b?.key || '';
     return labelA.localeCompare(labelB, undefined, { sensitivity: 'base' });
   });
 }
 
-function reconcileVisibility(columns, stored){
+function reconcileVisibility(columns, stored) {
   const available = new Set(columns.map(c => c.key));
   const result = [];
-  for(const key of stored){
-    if(available.has(key) && !result.includes(key)) result.push(key);
+  for (const key of stored) {
+    if (available.has(key) && !result.includes(key)) result.push(key);
   }
-  for(const col of columns){
-    if(col.locked && !result.includes(col.key)) result.unshift(col.key);
+  for (const col of columns) {
+    if (col.locked && !result.includes(col.key)) result.unshift(col.key);
   }
-  if(!result.length){
+  if (!result.length) {
     return columns.map(c => c.key);
   }
   return result;
 }
 
-function getAutoKeys(items){
+function getAutoKeys(items) {
   const keys = [];
-  for(let i = items.length - 1; i >= 0; i--){
+  for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
-    if(it.data && typeof it.data === 'object'){
+    if (it.data && typeof it.data === 'object') {
       Object.keys(it.data).forEach(k => {
-        if(!keys.includes(k)) keys.push(k);
+        if (!keys.includes(k)) keys.push(k);
       });
     }
   }
@@ -240,14 +233,14 @@ function getAutoKeys(items){
   return keys.slice(0, MAX_COLS);
 }
 
-function columnCountKey(accountId, slug){
-  return `columnCount:${accountId}:${slug||'default'}`;
+function columnCountKey(accountId, slug) {
+  return `columnCount:${accountId}:${slug || 'default'}`;
 }
 
-function loadColumnCount(accountId, slug){
+function loadColumnCount(accountId, slug) {
   try {
     const raw = localStorage.getItem(columnCountKey(accountId, slug));
-    if(!raw) return null;
+    if (!raw) return null;
     const parsed = parseInt(raw, 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   } catch {
@@ -255,8 +248,30 @@ function loadColumnCount(accountId, slug){
   }
 }
 
+function sortPrefKey(accountId, slug) {
+  return `sortPref:${accountId}:${slug || 'default'}`;
+}
+
+function loadSortPref(accountId, slug) {
+  try {
+    const raw = localStorage.getItem(sortPrefKey(accountId, slug));
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveSortPref(accountId, slug, sortState) {
+  try {
+    localStorage.setItem(sortPrefKey(accountId, slug), JSON.stringify(sortState));
+  } catch {
+    // ignore
+  }
+}
+
 (async () => {
-  const me = await loadMeOrRedirect(); if(!me) return;
+  const me = await loadMeOrRedirect(); if (!me) return;
   renderShell(me);
   const labels = getLabels(me);
   const preferences = getPreferences(me);
@@ -264,7 +279,7 @@ function loadColumnCount(accountId, slug){
 
   const accountId = qs('account');
   const slug = qs('slug');
-  if(!accountId || !slug){
+  if (!accountId || !slug) {
     document.body.innerHTML = '<main class="container"><p>Missing account or section.</p></main>';
     return;
   }
@@ -296,16 +311,16 @@ function loadColumnCount(accountId, slug){
   const kvRowsTbody = document.getElementById('kvRows');
   const addKVRowBtn = document.getElementById('addKVRowBtn');
 
-  if(itemsHeading){ itemsHeading.textContent = labels.items_label; }
-  if(itemsEmptyCopy){ itemsEmptyCopy.textContent = `No ${labels.items_label.toLowerCase()} in this ${labels.sections_label.toLowerCase()} yet. Use the menu to add one.`; }
-  if(editSectionMenuLabel){ editSectionMenuLabel.textContent = `Edit ${labels.sections_label}`; }
-  if(itemSettingsMenuLabel){ itemSettingsMenuLabel.textContent = 'Settings'; }
-  if(addItemMenuLabel){ addItemMenuLabel.textContent = `Add ${labels.items_label}`; }
-  if(deleteSectionMenuLabel){ deleteSectionMenuLabel.textContent = `Delete ${labels.sections_label}`; }
-  if(itemModalTitle){ itemModalTitle.textContent = `Add ${labels.items_label}`; }
-  if(exportBtn){ exportBtn.disabled = true; }
+  if (itemsHeading) { itemsHeading.textContent = labels.items_label; }
+  if (itemsEmptyCopy) { itemsEmptyCopy.textContent = `No ${labels.items_label.toLowerCase()} in this ${labels.sections_label.toLowerCase()} yet. Use the menu to add one.`; }
+  if (editSectionMenuLabel) { editSectionMenuLabel.textContent = `Edit ${labels.sections_label}`; }
+  if (itemSettingsMenuLabel) { itemSettingsMenuLabel.textContent = 'Settings'; }
+  if (addItemMenuLabel) { addItemMenuLabel.textContent = `Add ${labels.items_label}`; }
+  if (deleteSectionMenuLabel) { deleteSectionMenuLabel.textContent = `Delete ${labels.sections_label}`; }
+  if (itemModalTitle) { itemModalTitle.textContent = `Add ${labels.items_label}`; }
+  if (exportBtn) { exportBtn.disabled = true; }
 
-  if(backLink){
+  if (backLink) {
     backLink.href = `/account.html?id=${encodeURIComponent(accountId)}`;
   }
 
@@ -313,7 +328,7 @@ function loadColumnCount(accountId, slug){
   try {
     const myAccounts = await api('/api/me/accounts');
     const match = myAccounts.find(a => a.id === accountId);
-    if(match) accountName = match.name;
+    if (match) accountName = match.name;
   } catch {
     // ignore
   }
@@ -325,9 +340,10 @@ function loadColumnCount(accountId, slug){
   let columnDefs = [];
   let visibleColumns = [];
   let columnCount = null;
-  let sortState = { key: 'created_at', direction: 'desc' };
+  const savedSort = loadSortPref(accountId, slug);
+  let sortState = savedSort || { key: 'created_at', direction: 'desc' };
 
-  async function loadSectionMeta(){
+  async function loadSectionMeta() {
     try {
       const section = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`);
       currentSection = section;
@@ -346,39 +362,39 @@ function loadColumnCount(accountId, slug){
     }
   }
 
-  function openMenu(){
+  function openMenu() {
     menu.classList.add('open');
     menuButton.setAttribute('aria-expanded', 'true');
     const handler = (ev) => {
-      if(!menu.contains(ev.target) && ev.target !== menuButton){
+      if (!menu.contains(ev.target) && ev.target !== menuButton) {
         closeMenu();
       }
     };
-    document.addEventListener('click', handler, { once:true });
+    document.addEventListener('click', handler, { once: true });
   }
 
-  function closeMenu(){
+  function closeMenu() {
     menu.classList.remove('open');
     menuButton.setAttribute('aria-expanded', 'false');
   }
 
   menuButton.addEventListener('click', (e) => {
     e.stopPropagation();
-    if(menu.classList.contains('open')) closeMenu(); else openMenu();
+    if (menu.classList.contains('open')) closeMenu(); else openMenu();
   });
 
   document.addEventListener('keydown', (e) => {
-    if(e.key === 'Escape'){
+    if (e.key === 'Escape') {
       closeMenu();
       closeItemModal();
     }
   });
 
-  function openItemModal(){
+  function openItemModal() {
     itemMsg.textContent = '';
     itemForm.reset();
     // Setup UI depending on schema
-    if(schemaFields && schemaFields.length){
+    if (schemaFields && schemaFields.length) {
       const ordered = orderFields(schemaFields);
       schemaFieldsContainer.innerHTML = ordered.map(f => {
         const type = (f.type || 'text').toLowerCase();
@@ -386,14 +402,14 @@ function loadColumnCount(accountId, slug){
         const keyAttr = `data-key="${escapeHtml(f.key)}" data-type="${escapeHtml(type)}"`;
         const label = escapeHtml(f.label || f.key);
         const options = normalizeOptions(f.options);
-        if(type === 'textarea'){
+        if (type === 'textarea') {
           return `<p><label>${label}<textarea ${keyAttr} ${required}></textarea></label></p>`;
-        } else if((type === 'select' || type === 'dropdown') && options.length) {
+        } else if ((type === 'select' || type === 'dropdown') && options.length) {
           const opts = options.map(o => `<option value="${escapeHtml(String(o))}">${escapeHtml(String(o))}</option>`).join('');
           return `<p><label>${label}<select ${keyAttr} ${required}>${opts}</select></label></p>`;
-        } else if(type === 'checkbox') {
+        } else if (type === 'checkbox') {
           return `<p><label><input type="checkbox" ${keyAttr}> ${label}</label></p>`;
-        } else if(type === 'number') {
+        } else if (type === 'number') {
           return `<p><label>${label}<input type="number" ${keyAttr} ${required}></label></p>`;
         } else {
           return `<p><label>${label}<input type="text" ${keyAttr} ${required}></label></p>`;
@@ -412,12 +428,12 @@ function loadColumnCount(accountId, slug){
     setTimeout(() => itemNameInput.focus(), 0);
   }
 
-  function closeItemModal(){
+  function closeItemModal() {
     itemModal.classList.add('hidden');
     itemMsg.textContent = '';
   }
 
-  function addKVRow(key='', value=''){
+  function addKVRow(key = '', value = '') {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><input type="text" class="kv-key" value="${escapeHtml(key)}"></td>
@@ -433,32 +449,32 @@ function loadColumnCount(accountId, slug){
     kvRowsTbody.appendChild(tr);
   }
 
-  if(addKVRowBtn){
+  if (addKVRowBtn) {
     addKVRowBtn.addEventListener('click', (e) => {
       e.preventDefault();
       addKVRow();
     });
   }
 
-  if(itemCancel){
+  if (itemCancel) {
     itemCancel.addEventListener('click', (e) => {
       e.preventDefault();
       closeItemModal();
     });
   }
 
-  if(exportBtn){
+  if (exportBtn) {
     exportBtn.addEventListener('click', () => {
       exportItems();
     });
   }
 
-  function buildColumnDefs(items){
+  function buildColumnDefs(items) {
     const cols = [
       { key: 'name', label: 'Name', locked: true },
       { key: 'created_at', label: 'Date added', type: 'date' },
     ];
-    if(schemaFields && schemaFields.length){
+    if (schemaFields && schemaFields.length) {
       const visibleFields = orderFields(schemaFields.filter(f => f.showInTable !== false));
       visibleFields.forEach(f => cols.push({
         key: f.key,
@@ -473,16 +489,16 @@ function loadColumnCount(accountId, slug){
     return cols;
   }
 
-  function sortItems(list){
+  function sortItems(list) {
     const dir = sortState.direction === 'asc' ? 1 : -1;
     const key = sortState.key;
     return [...list].sort((a, b) => {
       let va;
       let vb;
-      if(key === 'name'){
+      if (key === 'name') {
         va = a.name || '';
         vb = b.name || '';
-      } else if(key === 'created_at') {
+      } else if (key === 'created_at') {
         va = a.created_at ? new Date(a.created_at).getTime() : 0;
         vb = b.created_at ? new Date(b.created_at).getTime() : 0;
       } else {
@@ -490,9 +506,9 @@ function loadColumnCount(accountId, slug){
         const rawB = b.data && typeof b.data === 'object' ? b.data[key] : undefined;
         va = rawA;
         vb = rawB;
-      }  
+      }
 
-      if(typeof va === 'number' && typeof vb === 'number'){
+      if (typeof va === 'number' && typeof vb === 'number') {
         return (va - vb) * dir;
       }
       const strA = va === null || va === undefined ? '' : String(va);
@@ -501,20 +517,20 @@ function loadColumnCount(accountId, slug){
     });
   }
 
-  function buildExportColumns(){
+  function buildExportColumns() {
     const cols = [];
     const seen = new Set();
     columnDefs.forEach(col => {
-      if(seen.has(col.key)) return;
+      if (seen.has(col.key)) return;
       seen.add(col.key);
       cols.push({ key: col.key, label: col.label || col.key });
     });
 
     const extras = new Set();
     itemsData.forEach(it => {
-      if(it.data && typeof it.data === 'object'){
+      if (it.data && typeof it.data === 'object') {
         Object.keys(it.data).forEach(k => {
-          if(!seen.has(k)) extras.add(k);
+          if (!seen.has(k)) extras.add(k);
         });
       }
     });
@@ -527,10 +543,10 @@ function loadColumnCount(accountId, slug){
     return cols;
   }
 
-  function prepareExportRows(columns){
+  function prepareExportRows(columns) {
     return itemsData.map(it => columns.map(col => {
-      if(col.key === 'name') return normalizeExportValue(it.name);
-      if(col.key === 'created_at'){
+      if (col.key === 'name') return normalizeExportValue(it.name);
+      if (col.key === 'created_at') {
         return it.created_at ? new Date(it.created_at).toISOString() : '';
       }
       const val = it.data && typeof it.data === 'object' ? it.data[col.key] : '';
@@ -538,7 +554,7 @@ function loadColumnCount(accountId, slug){
     }));
   }
 
-  function escapeXml(str){
+  function escapeXml(str) {
     return String(str ?? '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -547,10 +563,10 @@ function loadColumnCount(accountId, slug){
       .replace(/'/g, '&apos;');
   }
 
-  function columnLetter(idx){
+  function columnLetter(idx) {
     let n = idx + 1;
     let letters = '';
-    while(n > 0){
+    while (n > 0) {
       const rem = (n - 1) % 26;
       letters = String.fromCharCode(65 + rem) + letters;
       n = Math.floor((n - 1) / 26);
@@ -558,7 +574,7 @@ function loadColumnCount(accountId, slug){
     return letters;
   }
 
-  function buildSheetXml(columns, rows, sheetName){
+  function buildSheetXml(columns, rows, sheetName) {
     const headerCells = columns.map((col, i) => {
       const ref = `${columnLetter(i)}1`;
       return `<c r="${ref}" t="inlineStr"><is><t>${escapeXml(col.label || col.key)}</t></is></c>`;
@@ -583,9 +599,9 @@ function loadColumnCount(accountId, slug){
 
   const CRC_TABLE = (() => {
     const table = new Uint32Array(256);
-    for(let i = 0; i < 256; i++){
+    for (let i = 0; i < 256; i++) {
       let c = i;
-      for(let k = 0; k < 8; k++){
+      for (let k = 0; k < 8; k++) {
         c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1));
       }
       table[i] = c >>> 0;
@@ -593,15 +609,15 @@ function loadColumnCount(accountId, slug){
     return table;
   })();
 
-  function crc32(bytes){
+  function crc32(bytes) {
     let crc = 0 ^ (-1);
-    for(let i = 0; i < bytes.length; i++){
+    for (let i = 0; i < bytes.length; i++) {
       crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ bytes[i]) & 0xFF];
     }
     return (crc ^ (-1)) >>> 0;
   }
 
-  function dateToDos(date){
+  function dateToDos(date) {
     const d = new Date(date);
     const year = d.getFullYear();
     const month = d.getMonth() + 1;
@@ -614,7 +630,7 @@ function loadColumnCount(accountId, slug){
     return { dosDate, dosTime };
   }
 
-  function concatUint8(arrays){
+  function concatUint8(arrays) {
     const total = arrays.reduce((sum, a) => sum + a.length, 0);
     const out = new Uint8Array(total);
     let offset = 0;
@@ -625,7 +641,7 @@ function loadColumnCount(accountId, slug){
     return out;
   }
 
-  function createZip(entries){
+  function createZip(entries) {
     const encoder = new TextEncoder();
     const files = [];
     const central = [];
@@ -695,7 +711,7 @@ function loadColumnCount(accountId, slug){
     return concatUint8([...files, ...central, endRecord]);
   }
 
-  function createXlsx(columns, rows, sheetName){
+  function createXlsx(columns, rows, sheetName) {
     const sheetXml = buildSheetXml(columns, rows, sheetName);
     const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
       `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
@@ -731,8 +747,8 @@ function loadColumnCount(accountId, slug){
     return new Blob([zip], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
 
-  function exportItems(){
-    if(!itemsData.length){
+  function exportItems() {
+    if (!itemsData.length) {
       alert(`No ${labels.items_label.toLowerCase()} to export.`);
       return;
     }
@@ -757,44 +773,44 @@ function loadColumnCount(accountId, slug){
     }, 0);
   }
 
-  function setExportEnabled(enabled){
-    if(exportBtn){
+  function setExportEnabled(enabled) {
+    if (exportBtn) {
       exportBtn.disabled = !enabled;
     }
   }
 
-  function renderSortIndicator(col){
-    if(sortState.key !== col.key){
+  function renderSortIndicator(col) {
+    if (sortState.key !== col.key) {
       return '<span class="sort-arrow" aria-hidden="true">↕</span>';
     }
     const arrow = sortState.direction === 'asc' ? '↑ asc' : '↓ dsc';
     return `<span class="sort-arrow active" aria-hidden="true">${arrow}</span>`;
   }
 
-  function renderItemsTable(){
+  function renderItemsTable() {
     const visibleSet = new Set(visibleColumns);
     let activeColumns = columnDefs.filter(c => visibleSet.has(c.key));
-    if(Number.isFinite(columnCount) && columnCount > 0){
+    if (Number.isFinite(columnCount) && columnCount > 0) {
       activeColumns = activeColumns.slice(0, columnCount);
     }
-    if(!itemsData.length){
+    if (!itemsData.length) {
       itemsTableContainer.innerHTML = '';
-      if(itemsEmptyState){
+      if (itemsEmptyState) {
         itemsEmptyState.classList.remove('hidden');
       }
       setExportEnabled(false);
       return;
     }
-    if(itemsEmptyState){
+    if (itemsEmptyState) {
       itemsEmptyState.classList.add('hidden');
     }
     setExportEnabled(true);
 
-    if(activeColumns.length && !activeColumns.some(c => c.key === sortState.key)){
+    if (activeColumns.length && !activeColumns.some(c => c.key === sortState.key)) {
       const fallback = activeColumns[0];
       sortState = { key: fallback.key, direction: fallback.key === 'created_at' ? 'desc' : 'asc' };
     }
-    
+
     const headerCells = activeColumns.map(col => {
       const ariaSort = sortState.key === col.key ? (sortState.direction === 'asc' ? 'ascending' : 'descending') : 'none';
       return `<th><button type="button" class="sort-toggle" data-key="${escapeHtml(col.key)}" aria-sort="${ariaSort}">${escapeHtml(col.label)} ${renderSortIndicator(col)}</button></th>`;
@@ -803,18 +819,18 @@ function loadColumnCount(accountId, slug){
     const sortedItems = sortItems(itemsData);
     const rowsHtml = sortedItems.map(it => {
       const cells = [];
-      for(const col of activeColumns){
-        if(col.key === 'name'){
+      for (const col of activeColumns) {
+        if (col.key === 'name') {
           cells.push(`<td>${escapeHtml(it.name)}</td>`);
-        } else if(col.key === 'created_at'){
+        } else if (col.key === 'created_at') {
           cells.push(`<td>${escapeHtml(formatDateTime(it.created_at))}</td>`);
         } else {
           const val = it.data && typeof it.data === 'object' ? it.data[col.key] : undefined;
-          if((col.type || '').toLowerCase() === 'dropdown'){
+          if ((col.type || '').toLowerCase() === 'dropdown') {
             const opts = [...new Set(normalizeOptions(col.options))];
             const currentVal = val === undefined || val === null ? '' : String(val);
-            if(opts.length){
-              if(currentVal && !opts.includes(currentVal)) opts.unshift(currentVal);
+            if (opts.length) {
+              if (currentVal && !opts.includes(currentVal)) opts.unshift(currentVal);
               const optionsHtml = ['<option value="">Select…</option>', ...opts.map(o => `<option value="${escapeHtml(String(o))}"${o === currentVal ? ' selected' : ''}>${escapeHtml(String(o))}</option>`)].join('');
               cells.push(`<td><select class="inline-dropdown" data-inline-dropdown data-item-id="${escapeHtml(it.id)}" data-col-key="${escapeHtml(col.key)}" data-prev="${escapeHtml(currentVal)}">${optionsHtml}</select></td>`);
             } else {
@@ -834,13 +850,13 @@ function loadColumnCount(accountId, slug){
         `<span class="comment-icon" aria-hidden="true">💬</span>` +
         `<span class="comment-label">Comments</span>` +
         `<span class="${commentCountClass}" aria-hidden="true">${escapeHtml(String(commentCount))}</span>` +
-      `</a>`;
+        `</a>`;
       const deleteBtn = `<button type="button" class="btn small danger" data-action="delete-item" data-item-id="${escapeHtml(it.id)}">Delete</button>`;
       cells.push(`<td style="width:1%;white-space:nowrap;">` +
         `<a class="btn small" href="${viewHref}">View</a> ` +
         `${commentsBtn} ` +
         `${deleteBtn}` +
-      `</td>`);
+        `</td>`);
       return `<tr>${cells.join('')}</tr>`;
     }).join('');
 
@@ -849,8 +865,8 @@ function loadColumnCount(accountId, slug){
     headerButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         const key = btn.getAttribute('data-key');
-        if(!key) return;
-        if(sortState.key === key){
+        if (!key) return;
+        if (sortState.key === key) {
           sortState = { key, direction: sortState.direction === 'asc' ? 'desc' : 'asc' };
         } else {
           sortState = { key, direction: key === 'created_at' ? 'desc' : 'asc' };
@@ -865,12 +881,12 @@ function loadColumnCount(accountId, slug){
         const itemId = select.getAttribute('data-item-id');
         const key = select.getAttribute('data-col-key');
         const prev = select.getAttribute('data-prev') || '';
-        if(!itemId || !key) return;
+        if (!itemId || !key) return;
         const nextVal = select.value;
         select.disabled = true;
         try {
           const item = itemsData.find(i => i.id === itemId);
-          if(!item) throw new Error('Item not found');
+          if (!item) throw new Error('Item not found');
           const updatedData = { ...(item.data || {}) };
           updatedData[key] = nextVal;
           const updated = await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`, {
@@ -880,7 +896,7 @@ function loadColumnCount(accountId, slug){
           item.data = updated?.data || updatedData;
           select.setAttribute('data-prev', nextVal);
           renderItemsTable();
-        } catch(err){
+        } catch (err) {
           select.value = prev;
           alert(err.message || 'Failed to update value');
         } finally {
@@ -893,7 +909,7 @@ function loadColumnCount(accountId, slug){
     deleteButtons.forEach(btn => {
       btn.addEventListener('click', async () => {
         const itemId = btn.getAttribute('data-item-id');
-        if(!itemId) return;
+        if (!itemId) return;
         const matchedItem = itemsData.find(item => item.id === itemId);
         const itemName = matchedItem?.name?.trim() || '';
         const labelSource = (labels.items_label || 'Items').trim();
@@ -903,17 +919,17 @@ function loadColumnCount(accountId, slug){
         const fallbackTarget = `this ${singularLabel.toLowerCase() || 'item'}`;
         const promptTarget = itemName ? `"${itemName}"` : fallbackTarget;
         const shouldDelete = confirm(`Delete ${promptTarget}? This cannot be undone.`);
-        if(!shouldDelete){
+        if (!shouldDelete) {
           return;
         }
         const previousText = btn.textContent;
         btn.disabled = true;
         btn.textContent = 'Deleting…';
         try {
-          await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`, { method:'DELETE' });
+          await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
           itemsData = itemsData.filter(item => item.id !== itemId);
           renderItemsTable();
-        } catch(err){
+        } catch (err) {
           alert(err.message || 'Failed to delete item');
           btn.disabled = false;
           btn.textContent = previousText;
@@ -922,8 +938,8 @@ function loadColumnCount(accountId, slug){
     });
   }
 
-  async function loadItems(){
-    try{
+  async function loadItems() {
+    try {
       const page = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}/items?limit=200`);
       itemsData = page.items || [];
       setExportEnabled(itemsData.length > 0);
@@ -933,25 +949,25 @@ function loadColumnCount(accountId, slug){
       visibleColumns = reconcileVisibility(columnDefs, base);
       const rawCount = loadColumnCount(accountId, slug);
       const maxCount = visibleColumns.length;
-      if(Number.isFinite(rawCount) && rawCount > 0){
+      if (Number.isFinite(rawCount) && rawCount > 0) {
         columnCount = maxCount ? Math.min(rawCount, maxCount) : rawCount;
       } else {
         columnCount = null;
       }
       const visibleSet = new Set(visibleColumns);
-      if(!visibleSet.has(sortState.key)){
+      if (!visibleSet.has(sortState.key)) {
         const fallbackKey = visibleColumns[0] || 'created_at';
         sortState = { key: fallbackKey, direction: fallbackKey === 'created_at' ? 'desc' : 'asc' };
       }
 
-      if(!itemsData.length){
+      if (!itemsData.length) {
         itemsEmptyState.classList.remove('hidden');
         itemsTableContainer.innerHTML = '';
         return;
       }
       itemsEmptyState.classList.add('hidden');
       renderItemsTable();
-    }catch(e){
+    } catch (e) {
       itemsTableContainer.innerHTML = `<p class="small">Failed to load items: ${e.message}</p>`;
       itemsEmptyState.classList.add('hidden');
       setExportEnabled(false);
@@ -963,18 +979,18 @@ function loadColumnCount(accountId, slug){
     e.preventDefault();
     itemMsg.textContent = 'Saving…';
     const name = itemNameInput.value.trim();
-    if(!name){
+    if (!name) {
       itemMsg.textContent = 'Name is required.';
       return;
     }
 
     let data = {};
-    if(schemaFields && schemaFields.length){
+    if (schemaFields && schemaFields.length) {
       const inputs = schemaFieldsContainer.querySelectorAll('[data-key]');
       inputs.forEach(el => {
         const key = el.getAttribute('data-key');
         const type = (el.getAttribute('data-type') || 'text').toLowerCase();
-        if(type === 'checkbox'){
+        if (type === 'checkbox') {
           data[key] = el.checked;
         } else {
           data[key] = parseLooseValue(el.value);
@@ -985,9 +1001,9 @@ function loadColumnCount(accountId, slug){
       rows.forEach(row => {
         const kInput = row.querySelector('.kv-key');
         const vInput = row.querySelector('.kv-value');
-        if(!kInput) return;
+        if (!kInput) return;
         const key = kInput.value.trim();
-        if(!key) return;
+        if (!key) return;
         const raw = vInput ? vInput.value : '';
         data[key] = parseLooseValue(raw);
       });
@@ -995,13 +1011,13 @@ function loadColumnCount(accountId, slug){
 
     try {
       await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}/items`, {
-        method:'POST',
+        method: 'POST',
         body: JSON.stringify({ name, data })
       });
       itemMsg.textContent = 'Item added.';
       closeItemModal();
       await loadItems();
-    } catch(err){
+    } catch (err) {
       itemMsg.textContent = err.message || 'Failed to add item';
     }
   });
@@ -1009,40 +1025,50 @@ function loadColumnCount(accountId, slug){
   // 3-dot menu actions
   menu.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-action]');
-    if(!btn) return;
+    if (!btn) return;
     const action = btn.dataset.action;
     closeMenu();
 
-    if(action === 'add-item'){
+    if (action === 'add-item') {
       openItemModal();
-    } else if(action === 'settings'){
+    } else if (action === 'settings') {
       window.location.href = `/item-columns.html?account=${encodeURIComponent(accountId)}&slug=${encodeURIComponent(slug)}`;
-    } else if(action === 'edit'){
+    } else if (action === 'edit') {
       const currentLabel = currentSection?.label || slug;
       const next = prompt('Section name', currentLabel);
-      if(!next) return;
+      if (!next) return;
       const trimmed = next.trim();
-      if(!trimmed || trimmed === currentLabel) return;
+      if (!trimmed || trimmed === currentLabel) return;
       try {
         const updated = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`, {
-          method:'PUT',
+          method: 'PUT',
           body: JSON.stringify({ label: trimmed, schema: currentSection?.schema || {} })
         });
         currentSection = updated;
         titleEl.textContent = updated.label;
-      } catch(err){
+      } catch (err) {
         alert(err.message || 'Failed to update section');
       }
-    } else if(action === 'delete'){
-      if(!confirm('Delete this section and all its items? This cannot be undone.')){
+    } else if (action === 'delete') {
+      if (!confirm('Delete this section and all its items? This cannot be undone.')) {
         return;
       }
       try {
-        await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`, { method:'DELETE' });
+        await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`, { method: 'DELETE' });
         window.location.replace(`/account.html?id=${encodeURIComponent(accountId)}`);
-      } catch(err){
+      } catch (err) {
         alert(err.message || 'Failed to delete section');
       }
+    } else if (action === 'save-sort') {
+      saveSortPref(accountId, slug, sortState);
+      // Optional: Visual feedback
+      const originalText = btn.textContent;
+      btn.textContent = 'Saved!';
+      setTimeout(() => {
+        btn.textContent = originalText;
+        closeMenu();
+      }, 1000);
+      return; // Don't close immediately so user sees "Saved!"
     }
   });
 

@@ -1,15 +1,8 @@
-import { loadMeOrRedirect, renderShell, api, getLabels } from './common.js';
+import { loadMeOrRedirect, renderShell, api, getLabels, escapeHtml } from './common.js';
 
 function qs(name) {
   const m = new URLSearchParams(location.search).get(name);
   return m && decodeURIComponent(m);
-}
-
-function escapeHtml(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
 }
 
 function renderObjectTable(obj) {
@@ -377,7 +370,7 @@ function formatDateTime(val) {
     }
 
     if (!rows.length) {
-      itemPropsBody.innerHTML = `<tr><td class="small" colspan="2">No properties for this ${labels.items_label.toLowerCase()}.</td></tr>`;
+      itemPropsBody.innerHTML = `<tr><td class="small" colspan="2">No properties for this ${escapeHtml(labels.items_label.toLowerCase())}.</td></tr>`;
     } else {
       itemPropsBody.innerHTML = rows.map(r => `
         <tr>

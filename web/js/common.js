@@ -1,6 +1,15 @@
-export function getToken(){ return sessionStorage.getItem('token') || ''; }
-export function setToken(t){ sessionStorage.setItem('token', t); }
-export function logout(){ sessionStorage.removeItem('token'); window.location.replace('/'); }
+export function getToken() { return sessionStorage.getItem('token') || ''; }
+export function setToken(t) { sessionStorage.setItem('token', t); }
+export function logout() { sessionStorage.removeItem('token'); window.location.replace('/'); }
+
+export function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 export const DEFAULT_LABELS = {
   accounts_label: 'Home',
@@ -13,7 +22,7 @@ export const DEFAULT_PREFERENCES = {
   show_slugs: false,
 };
 
-export function getPreferences(user){
+export function getPreferences(user) {
   const prefs = user?.preferences || {};
   return {
     accounts_label: (prefs.accounts_label || DEFAULT_LABELS.accounts_label).trim() || DEFAULT_LABELS.accounts_label,
@@ -23,7 +32,7 @@ export function getPreferences(user){
   };
 }
 
-export function getLabels(user){
+export function getLabels(user) {
   const prefs = getPreferences(user);
   return {
     accounts_label: prefs.accounts_label,
@@ -32,32 +41,32 @@ export function getLabels(user){
   };
 }
 
-export async function api(path, opts={}){
-  const headers = Object.assign({ 'Content-Type':'application/json' }, opts.headers||{});
+export async function api(path, opts = {}) {
+  const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
   const token = getToken();
-  if(token) headers.Authorization = 'Bearer '+token;
+  if (token) headers.Authorization = 'Bearer ' + token;
   const res = await fetch(path, Object.assign({}, opts, { headers }));
-  if(!res.ok){
-    const text = await res.text().catch(()=>res.statusText);
-    throw new Error(text || ('HTTP '+res.status));
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(text || ('HTTP ' + res.status));
   }
   if (res.status === 204) return null;
-  const ct = res.headers.get('content-type')||'';
+  const ct = res.headers.get('content-type') || '';
   return ct.includes('application/json') ? res.json() : res.text();
 }
 
-export async function loadMeOrRedirect(){
+export async function loadMeOrRedirect() {
   const token = getToken();
-  if(!token){ window.location.replace('/'); return null; }
+  if (!token) { window.location.replace('/'); return null; }
   try { return await api('/api/me'); }
-  catch(e){ logout(); return null; }
+  catch (e) { logout(); return null; }
 }
 
-export function renderShell(user){
+export function renderShell(user) {
   const labels = getLabels(user);
   const header = document.getElementById('site-header');
   const footer = document.getElementById('site-footer');
-  if(header){
+  if (header) {
     header.innerHTML = `
       <div class="container header-bar">
         <nav class="menu">
@@ -65,14 +74,14 @@ export function renderShell(user){
           ${user?.is_admin ? '<a href="/settings.html">Settings</a>' : ''}
         </nav>
         <div class="menu" style="margin-left:auto;">
-          <span class="pill small">${user?.email||''}</span>
+      <span class="pill small">${escapeHtml(user?.email) || ''}</span>
           <a href="#" id="logoutBtn" class="btn">Logout</a>
         </div>
       </div>`;
-    const btn=document.getElementById('logoutBtn'); if(btn) btn.addEventListener('click',(e)=>{e.preventDefault(); logout();});
+    const btn = document.getElementById('logoutBtn'); if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); logout(); });
   }
-  if(footer){
-    const year=new Date().getFullYear();
+  if (footer) {
+    const year = new Date().getFullYear();
     footer.innerHTML = `<div class="container small">&copy; ${year} ADIGI One Platform</div>`;
   }
 }

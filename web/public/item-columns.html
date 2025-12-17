@@ -1,8 +1,14 @@
-<!doctype html><html><head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Item column settings</title>
   <link rel="stylesheet" href="/app.css">
-</head><body>
+</head>
+
+<body>
   <header id="site-header"></header>
   <main class="page-container">
     <div class="account-header">
@@ -17,7 +23,8 @@
 
     <section class="card">
       <h2>Column template</h2>
-      <p class="small">Provide a JSON template describing the columns for this section. Save the template to refresh the column list.</p>
+      <p class="small">Provide a JSON template describing the columns for this section. Save the template to refresh the
+        column list.</p>
       <label for="templateInput" class="small">Template JSON</label>
       <textarea id="templateInput" rows="12" spellcheck="false"></textarea>
       <p class="small">Example template:</p>
@@ -44,7 +51,8 @@
     </section>
 
     <section class="card">
-      <p class="small">Choose which columns should appear in the items table for this section. Changes do not affect the item detail view.</p>
+      <p class="small">Choose which columns should appear in the items table for this section. Changes do not affect the
+        item detail view.</p>
       <div id="columnsList" class="stacked-list"></div>
       <div class="actions" style="justify-content:flex-start;">
         <button class="btn" id="saveColumnsBtn">Save</button>
@@ -55,4 +63,6 @@
   </main>
   <script type="module" src="/js/auto-updater.js"></script>
   <script type="module" src="/js/item_columns.js"></script>
-</body></html>
+</body>
+
+</html>

@@ -1,8 +1,8 @@
-import { loadMeOrRedirect, renderShell, api } from './common.js';
+import { loadMeOrRedirect, renderShell, api, escapeHtml } from './common.js';
 (async () => {
-  const me = await loadMeOrRedirect(); if(!me) return;
+  const me = await loadMeOrRedirect(); if (!me) return;
   renderShell(me);
-  if(!me.is_admin){ window.location.replace('/accounts.html'); return; }
+  if (!me.is_admin) { window.location.replace('/accounts.html'); return; }
 
   const grid = document.getElementById('acctGrid');
   const selectAll = document.getElementById('selectAll');
@@ -11,12 +11,12 @@ import { loadMeOrRedirect, renderShell, api } from './common.js';
   const userType = document.getElementById('userType');
   const nameInput = document.getElementById('name');
 
-  if(me.user_type !== 'super_admin'){
+  if (me.user_type !== 'super_admin') {
     const superOpt = userType.querySelector('option[value="super_admin"]');
-    if(superOpt) superOpt.disabled = true;
-    if(userType.value === 'super_admin') userType.value = 'admin';
+    if (superOpt) superOpt.disabled = true;
+    if (userType.value === 'super_admin') userType.value = 'admin';
   }
-  
+
   try {
     const accounts = await api('/api/admin/all-accounts');
     const selectAllCard = document.createElement('label');
@@ -31,11 +31,11 @@ import { loadMeOrRedirect, renderShell, api } from './common.js';
     grid.style.display = 'block';
     grid.innerHTML = accounts.map(a => `
       <label class="card account-card" style="display: flex; justify-content: space-between; align-items: center;">
-        <div><strong>${a.name}</strong><div class="small"><code>${a.id}</code></div></div>
-        <input type="checkbox" value="${a.id}">
+        <div><strong>${escapeHtml(a.name)}</strong><div class="small"><code>${escapeHtml(a.id)}</code></div></div>
+        <input type="checkbox" value="${escapeHtml(a.id)}">
       </label>`).join('');
-  } catch(e){
-    grid.innerHTML = `<p class="small">Failed to load accounts: ${e.message}</p>`;
+  } catch (e) {
+    grid.innerHTML = `<p class="small">Failed to load accounts: ${escapeHtml(e.message)}</p>`;
   }
 
   selectAll.addEventListener('change', () => {
@@ -50,14 +50,14 @@ import { loadMeOrRedirect, renderShell, api } from './common.js';
     const password = document.getElementById('password').value;
     const selected = Array.from(grid.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
     const role = userType.value;
-    if(!name){ msg.textContent = 'Name is required'; return; }
+    if (!name) { msg.textContent = 'Name is required'; return; }
     try {
-      await api('/api/admin/users', { method:'POST', body: JSON.stringify({ name, email, password, user_type: role, accounts: selected }) });
+      await api('/api/admin/users', { method: 'POST', body: JSON.stringify({ name, email, password, user_type: role, accounts: selected }) });
       msg.textContent = 'User created successfully.';
       form.reset();
       selectAll.checked = false;
-      if(me.user_type !== 'super_admin'){ userType.value = 'admin'; }
-    } catch(err){
+      if (me.user_type !== 'super_admin') { userType.value = 'admin'; }
+    } catch (err) {
       msg.textContent = err.message || 'Failed to create user';
     }
   });

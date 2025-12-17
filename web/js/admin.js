@@ -1,4 +1,4 @@
-import { loadMeOrRedirect, renderShell, api, DEFAULT_PREFERENCES } from './common.js';
+import { loadMeOrRedirect, renderShell, api, DEFAULT_PREFERENCES, escapeHtml } from './common.js';
 
 const TYPE_LABELS = {
   super_admin: 'Super admin',
@@ -7,9 +7,9 @@ const TYPE_LABELS = {
 };
 
 (async () => {
-  const me = await loadMeOrRedirect(); if(!me) return;
+  const me = await loadMeOrRedirect(); if (!me) return;
   renderShell(me);
-  if(!me.is_admin){ window.location.replace('/accounts.html'); return; }
+  if (!me.is_admin) { window.location.replace('/accounts.html'); return; }
 
   // Modal elements
   const editModal = document.getElementById('editUserModal');
@@ -29,24 +29,24 @@ const TYPE_LABELS = {
   const emptyState = document.getElementById('usersEmptyState');
   const showPreferences = me.user_type === 'super_admin';
 
-  function renderPrefs(user){
-    if(!showPreferences || !user.preferences) return '';
+  function renderPrefs(user) {
+    if (!showPreferences || !user.preferences) return '';
     const prefs = user.preferences;
-    const changed = Object.entries(prefs).filter(([k,v]) => {
-      if(!(k in DEFAULT_PREFERENCES)) return false;
+    const changed = Object.entries(prefs).filter(([k, v]) => {
+      if (!(k in DEFAULT_PREFERENCES)) return false;
       const defaultVal = DEFAULT_PREFERENCES[k];
-      if(typeof defaultVal === 'boolean') return Boolean(v) !== defaultVal;
-      if(typeof v !== 'string') return false;
+      if (typeof defaultVal === 'boolean') return Boolean(v) !== defaultVal;
+      if (typeof v !== 'string') return false;
       const trimmed = v.trim();
       return trimmed && trimmed !== defaultVal;
     });
-    if(!changed.length) return '<div class="small">Customised fields: none</div>';
-    const items = changed.map(([k,v]) => {
-      const label = k.replace('_',' ');
-      if(typeof DEFAULT_PREFERENCES[k] === 'boolean'){
-        return `<li><strong>${label}:</strong> ${v ? 'Yes' : 'No'}</li>`;
+    if (!changed.length) return '<div class="small">Customised fields: none</div>';
+    const items = changed.map(([k, v]) => {
+      const label = k.replace('_', ' ');
+      if (typeof DEFAULT_PREFERENCES[k] === 'boolean') {
+        return `<li><strong>${escapeHtml(label)}:</strong> ${v ? 'Yes' : 'No'}</li>`;
       }
-      return `<li><strong>${label}:</strong> ${v}</li>`;
+      return `<li><strong>${escapeHtml(label)}:</strong> ${escapeHtml(v)}</li>`;
     }).join('');
     return `<div class="small">Customised fields:<ul>${items}</ul></div>`;
   }
@@ -54,7 +54,7 @@ const TYPE_LABELS = {
   try {
     const users = await api('/api/admin/users'); // Renamed to 'users'
     allUsers = users; // Cache the user list
-    if(!users.length){
+    if (!users.length) {
       list.innerHTML = '';
       emptyState.classList.remove('hidden');
       return;
@@ -73,9 +73,9 @@ const TYPE_LABELS = {
       return `
         <div class="card account-card" id="user-card-${u.id}">
           <div>
-            <strong>${name}</strong>
-            <div class="small">${u.email}</div>
-            <div class="small">${typeLabel} • ${status}</div>
+            <strong>${escapeHtml(name)}</strong>
+            <div class="small">${escapeHtml(u.email)}</div>
+            <div class="small">${escapeHtml(typeLabel)} • ${status}</div>
             ${prefs}
           </div>
           <div class="card-actions">
@@ -85,8 +85,8 @@ const TYPE_LABELS = {
         </div>
       `;
     }).join('');
-  } catch(e){
-    list.innerHTML = `<p class="small">Failed to load users: ${e.message}</p>`;
+  } catch (e) {
+    list.innerHTML = `<p class="small">Failed to load users: ${escapeHtml(e.message)}</p>`;
     emptyState.classList.add('hidden');
   }
 

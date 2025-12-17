@@ -1,4 +1,4 @@
-import { loadMeOrRedirect, renderShell, api } from './common.js';
+import { loadMeOrRedirect, renderShell, api, escapeHtml } from './common.js';
 document.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
     const accountId = params.get('account_id');
@@ -41,9 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
             commentEl.className = 'comment-item';
             const createdAt = new Date(comment.created_at).toLocaleString();
             commentEl.innerHTML = `
-                <p class="comment-body">${comment.comment}</p>
+                <p class="comment-body">${escapeHtml(comment.comment)}</p>
                 <div class="comment-meta">
-                    <span>By: <strong>${comment.user_name || 'Unknown User'}</strong></span>
+                    <span>By: <strong>${escapeHtml(comment.user_name || 'Unknown User')}</strong></span>
                     <span>On: ${createdAt}</span>
                 </div>
             `;

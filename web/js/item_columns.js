@@ -1,25 +1,18 @@
-import { loadMeOrRedirect, renderShell, api, getLabels } from './common.js';
+import { loadMeOrRedirect, renderShell, api, getLabels, escapeHtml } from './common.js';
 
-function qs(name){
+function qs(name) {
   const m = new URLSearchParams(location.search).get(name);
   return m && decodeURIComponent(m);
 }
 
-function escapeHtml(str){
-  return String(str ?? '')
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;');
+function prefKey(accountId, slug) {
+  return `columnPrefs:${accountId}:${slug || 'default'}`;
 }
 
-function prefKey(accountId, slug){
-  return `columnPrefs:${accountId}:${slug||'default'}`;
-}
-
-function loadColumnPrefs(accountId, slug){
+function loadColumnPrefs(accountId, slug) {
   try {
     const raw = localStorage.getItem(prefKey(accountId, slug));
-    if(!raw) return [];
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -27,18 +20,18 @@ function loadColumnPrefs(accountId, slug){
   }
 }
 
-function saveColumnPrefs(accountId, slug, keys){
+function saveColumnPrefs(accountId, slug, keys) {
   localStorage.setItem(prefKey(accountId, slug), JSON.stringify(keys));
 }
 
-function columnCountKey(accountId, slug){
-  return `columnCount:${accountId}:${slug||'default'}`;
+function columnCountKey(accountId, slug) {
+  return `columnCount:${accountId}:${slug || 'default'}`;
 }
 
-function loadColumnCount(accountId, slug){
+function loadColumnCount(accountId, slug) {
   try {
     const raw = localStorage.getItem(columnCountKey(accountId, slug));
-    if(!raw) return null;
+    if (!raw) return null;
     const num = parseInt(raw, 10);
     return Number.isFinite(num) && num > 0 ? num : null;
   } catch {
@@ -46,25 +39,25 @@ function loadColumnCount(accountId, slug){
   }
 }
 
-function saveColumnCount(accountId, slug, val){
+function saveColumnCount(accountId, slug, val) {
   localStorage.setItem(columnCountKey(accountId, slug), String(val));
 }
 
-function templatePrefKey(accountId, slug){
-  return `columnTemplate:${accountId}:${slug||'default'}`;
+function templatePrefKey(accountId, slug) {
+  return `columnTemplate:${accountId}:${slug || 'default'}`;
 }
 
-function loadTemplate(accountId, slug){
+function loadTemplate(accountId, slug) {
   try {
     const raw = localStorage.getItem(templatePrefKey(accountId, slug));
-    if(!raw) return null;
+    if (!raw) return null;
     return JSON.parse(raw);
   } catch {
     return null;
   }
 }
 
-function saveTemplate(accountId, slug, tpl){
+function saveTemplate(accountId, slug, tpl) {
   localStorage.setItem(templatePrefKey(accountId, slug), JSON.stringify(tpl));
 }
 
@@ -93,18 +86,18 @@ const SAMPLE_TEMPLATE = {
   ]
 };
 
-function normalizeField(field, idx = 0){
-  if(!field || typeof field !== 'object') return null;
+function normalizeField(field, idx = 0) {
+  if (!field || typeof field !== 'object') return null;
   const key = field.key || field.name;
-  if(!key) return null;
+  if (!key) return null;
   const type = (field.type || 'string').toLowerCase();
   const orderRaw = field.order;
   const parsedOrder = typeof orderRaw === 'number' ? orderRaw : (typeof orderRaw === 'string' ? parseInt(orderRaw, 10) : null);
   let options = [];
-  if(type === 'dropdown'){
-    if(Array.isArray(field.options)){
+  if (type === 'dropdown') {
+    if (Array.isArray(field.options)) {
       options = field.options.map(o => String(o));
-    } else if(field.options && typeof field.options === 'object'){
+    } else if (field.options && typeof field.options === 'object') {
       options = Object.values(field.options).map(o => String(o));
     }
   }
@@ -118,15 +111,15 @@ function normalizeField(field, idx = 0){
   };
 }
 
-function parseTemplate(tpl){
-  if(!tpl || typeof tpl !== 'object') return { fields: [] };
+function parseTemplate(tpl) {
+  if (!tpl || typeof tpl !== 'object') return { fields: [] };
 
-  if(Array.isArray(tpl.fields)){
+  if (Array.isArray(tpl.fields)) {
     const normalizedFields = tpl.fields.map((f, idx) => normalizeField(f, idx)).filter(Boolean);
     normalizedFields.sort((a, b) => {
       const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
       const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
-      if(orderA !== orderB) return orderA - orderB;
+      if (orderA !== orderB) return orderA - orderB;
       return a.index - b.index;
     });
     return { fields: normalizedFields };
@@ -140,49 +133,49 @@ function parseTemplate(tpl){
   fields.sort((a, b) => {
     const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
     const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
-    if(orderA !== orderB) return orderA - orderB;
+    if (orderA !== orderB) return orderA - orderB;
     return a.index - b.index;
   });
 
   return { fields };
 }
 
-function orderFields(fields){
+function orderFields(fields) {
   return [...(fields || [])].sort((a, b) => {
     const orderA = a?.order ?? Number.MAX_SAFE_INTEGER;
     const orderB = b?.order ?? Number.MAX_SAFE_INTEGER;
-    if(orderA !== orderB) return orderA - orderB;
+    if (orderA !== orderB) return orderA - orderB;
     const labelA = a?.label || a?.key || '';
     const labelB = b?.label || b?.key || '';
     return labelA.localeCompare(labelB, undefined, { sensitivity: 'base' });
   });
 }
 
-function fieldsToTemplate(slug, fields){
-  if(!fields || !fields.length) return null;
+function fieldsToTemplate(slug, fields) {
+  if (!fields || !fields.length) return null;
   const cleaned = fields.map(({ index, ...rest }) => rest).filter(f => f && f.key);
   return { name: slug || 'template', fields: cleaned };
 }
 
-function getAutoKeys(items){
+function getAutoKeys(items) {
   const keySet = new Set();
-  for(const it of items){
-    if(it.data && typeof it.data === 'object'){
+  for (const it of items) {
+    if (it.data && typeof it.data === 'object') {
       Object.keys(it.data).forEach(k => keySet.add(k));
     }
   }
   let keys = Array.from(keySet);
   const MAX_COLS = 8;
-  if(keys.length > MAX_COLS) keys = keys.slice(0, MAX_COLS);
+  if (keys.length > MAX_COLS) keys = keys.slice(0, MAX_COLS);
   return keys;
 }
 
-function buildColumns(items, schemaFields){
+function buildColumns(items, schemaFields) {
   const columns = [
     { key: 'name', label: 'Name', locked: true },
     { key: 'created_at', label: 'Date added' },
   ];
-  if(schemaFields && schemaFields.length){
+  if (schemaFields && schemaFields.length) {
     const visibleFields = orderFields(schemaFields.filter(f => f.showInTable !== false));
     visibleFields.forEach(f => {
       columns.push({ key: f.key, label: f.label || f.key });
@@ -194,29 +187,29 @@ function buildColumns(items, schemaFields){
   return columns;
 }
 
-function reconcileVisibility(columns, stored){
+function reconcileVisibility(columns, stored) {
   const available = new Set(columns.map(c => c.key));
   const result = [];
-  for(const key of stored){
-    if(available.has(key) && !result.includes(key)) result.push(key);
+  for (const key of stored) {
+    if (available.has(key) && !result.includes(key)) result.push(key);
   }
-  for(const col of columns){
-    if(col.locked && !result.includes(col.key)) result.unshift(col.key);
+  for (const col of columns) {
+    if (col.locked && !result.includes(col.key)) result.unshift(col.key);
   }
-  if(!result.length){
+  if (!result.length) {
     return columns.map(c => c.key);
   }
   return result;
 }
 
 (async () => {
-  const me = await loadMeOrRedirect(); if(!me) return;
+  const me = await loadMeOrRedirect(); if (!me) return;
   renderShell(me);
   const labels = getLabels(me);
 
   const accountId = qs('account');
   const slug = qs('slug');
-  if(!accountId || !slug){
+  if (!accountId || !slug) {
     document.body.innerHTML = '<main class="container"><p>Missing account or section.</p></main>';
     return;
   }
@@ -235,7 +228,7 @@ function reconcileVisibility(columns, stored){
   const templateMessage = document.getElementById('templateMessage');
   const saveTemplateBtn = document.getElementById('saveTemplateBtn');
 
-  if(backToSection){
+  if (backToSection) {
     backToSection.href = `/section.html?account=${encodeURIComponent(accountId)}&slug=${encodeURIComponent(slug)}`;
   }
 
@@ -243,7 +236,7 @@ function reconcileVisibility(columns, stored){
   try {
     const myAccounts = await api('/api/me/accounts');
     const match = myAccounts.find(a => a.id === accountId);
-    if(match) accountName = match.name;
+    if (match) accountName = match.name;
   } catch {
     // ignore
   }
@@ -257,13 +250,13 @@ function reconcileVisibility(columns, stored){
     const section = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`);
     const schema = section.schema || {};
     const apiFields = parseTemplate(schema).fields || [];
-    if(!schemaFields.length){
+    if (!schemaFields.length) {
       schemaFields = apiFields;
     }
     sectionLabel = section.label || slug;
     apiTemplate = fieldsToTemplate(slug, apiFields);
   } catch {
-    if(!schemaFields.length){
+    if (!schemaFields.length) {
       schemaFields = [];
     }
     sectionLabel = slug;
@@ -280,10 +273,10 @@ function reconcileVisibility(columns, stored){
     items = [];
   }
 
-  if(templateExample){
+  if (templateExample) {
     templateExample.textContent = JSON.stringify(SAMPLE_TEMPLATE, null, 2);
   }
-  if(templateInput){
+  if (templateInput) {
     const tplToShow = storedTemplate || apiTemplate || SAMPLE_TEMPLATE;
     templateInput.value = JSON.stringify(tplToShow, null, 2);
   }
@@ -295,16 +288,16 @@ function reconcileVisibility(columns, stored){
   const storedCount = loadColumnCount(accountId, slug);
   const fallbackCount = visibleKeys.length ? visibleKeys.length : null;
   const initialCount = Number.isFinite(storedCount) ? storedCount : fallbackCount;
-  if(columnCountInput && initialCount){
+  if (columnCountInput && initialCount) {
     columnCountInput.value = initialCount;
   }
 
   columnCountForm?.addEventListener('submit', (ev) => {
     ev.preventDefault();
-    if(!columnCountInput) return;
+    if (!columnCountInput) return;
     columnCountMessage.textContent = '';
     const parsed = parseInt(columnCountInput.value, 10);
-    if(!Number.isFinite(parsed) || parsed < 1){
+    if (!Number.isFinite(parsed) || parsed < 1) {
       columnCountMessage.textContent = 'Enter a number of columns (minimum 1).';
       return;
     }
@@ -312,8 +305,8 @@ function reconcileVisibility(columns, stored){
     columnCountMessage.textContent = 'Saved. Return to the section to see your updated table.';
   });
 
-  function renderList(){
-    if(!columns.length){
+  function renderList() {
+    if (!columns.length) {
       columnsList.innerHTML = '<p class="small">No columns available.</p>';
       return;
     }
@@ -338,7 +331,7 @@ function reconcileVisibility(columns, stored){
     const boxes = columnsList.querySelectorAll('input[type="checkbox"][data-key]');
     const selected = [];
     boxes.forEach(box => {
-      if(box.disabled || box.checked){
+      if (box.disabled || box.checked) {
         selected.push(box.getAttribute('data-key'));
       }
     });
@@ -350,19 +343,19 @@ function reconcileVisibility(columns, stored){
 
   saveTemplateBtn?.addEventListener('click', () => {
     templateMessage.textContent = '';
-    if(!templateInput){
+    if (!templateInput) {
       templateMessage.textContent = 'Template editor not found.';
       return;
     }
     const raw = templateInput.value.trim();
-    if(!raw){
+    if (!raw) {
       templateMessage.textContent = 'Enter a template to save.';
       return;
     }
     try {
       const parsed = JSON.parse(raw);
       const normalized = parseTemplate(parsed);
-      if(!normalized.fields.length){
+      if (!normalized.fields.length) {
         templateMessage.textContent = 'Template must include at least one column (fields array or data object).';
         return;
       }
@@ -375,7 +368,7 @@ function reconcileVisibility(columns, stored){
       renderList();
       templateInput.value = JSON.stringify(storedPayload, null, 2);
       templateMessage.textContent = 'Template saved. Column visibility was refreshed from the template.';
-    } catch(err){
+    } catch (err) {
       templateMessage.textContent = `Could not parse JSON: ${err.message}`;
     }
   });

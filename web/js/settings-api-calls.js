@@ -1,13 +1,6 @@
-import { loadMeOrRedirect, renderShell, getLabels } from './common.js';
+import { loadMeOrRedirect, renderShell, getLabels, escapeHtml } from './common.js';
 
-function escapeHtml(str){
-  return String(str ?? '')
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;');
-}
-
-function formatJson(obj){
+function formatJson(obj) {
   try {
     return JSON.stringify(obj, null, 2);
   } catch {
@@ -15,12 +8,12 @@ function formatJson(obj){
   }
 }
 
-function singularize(label){
+function singularize(label) {
   const lower = String(label || '').toLowerCase();
   return lower.endsWith('s') ? lower.slice(0, -1) : lower;
 }
 
-function renderEndpoint(endpoint){
+function renderEndpoint(endpoint) {
   const body = endpoint.body ? `<div class="small"><strong>Body</strong></div><pre>${escapeHtml(formatJson(endpoint.body))}</pre>` : '';
   const pathParams = endpoint.params?.length ? `<div class="small"><strong>Path params:</strong> ${endpoint.params.join(', ')}</div>` : '';
   const notes = endpoint.notes ? `<div class="small">${endpoint.notes}</div>` : '';
@@ -39,9 +32,9 @@ function renderEndpoint(endpoint){
 }
 
 (async () => {
-  const me = await loadMeOrRedirect(); if(!me) return;
+  const me = await loadMeOrRedirect(); if (!me) return;
   renderShell(me);
-  if(!me.is_admin){ window.location.replace('/accounts.html'); return; }
+  if (!me.is_admin) { window.location.replace('/accounts.html'); return; }
 
   const labels = getLabels(me);
   const apiHeading = document.getElementById('apiHeading');
@@ -52,17 +45,17 @@ function renderEndpoint(endpoint){
   const itemName = singularize(labels.items_label);
 
   document.title = `${labels.sections_label} & ${labels.items_label} API calls`;
-  if(apiHeading){ apiHeading.textContent = `${labels.sections_label} & ${labels.items_label} API calls`; }
-  if(apiIntro){ apiIntro.textContent = `Endpoints for creating, editing, and removing ${labels.sections_label.toLowerCase()} and ${labels.items_label.toLowerCase()}.`; }
+  if (apiHeading) { apiHeading.textContent = `${labels.sections_label} & ${labels.items_label} API calls`; }
+  if (apiIntro) { apiIntro.textContent = `Endpoints for creating, editing, and removing ${labels.sections_label.toLowerCase()} and ${labels.items_label.toLowerCase()}.`; }
 
-  if(authCard){
+  if (authCard) {
     authCard.innerHTML = `
       <div class="card api-card">
         <div class="api-card-header">
           <span class="tag">Auth</span>
           <strong>Authorization</strong>
         </div>
-        <div>All ${labels.sections_label.toLowerCase()} and ${labels.items_label.toLowerCase()} endpoints require the bearer token from <code>/api/login</code>.</div>
+        <div>All ${escapeHtml(labels.sections_label.toLowerCase())} and ${escapeHtml(labels.items_label.toLowerCase())} endpoints require the bearer token from <code>/api/login</code>.</div>
         <div class="small" style="margin-top:6px;">1. Authenticate with <code>/api/login</code> using <code>email</code> and <code>password</code> to get <code>access_token</code>.</div>
         <div class="small">2. Send the token on every request.</div>
         <pre>Authorization: Bearer &lt;access_token&gt;</pre>
@@ -156,7 +149,7 @@ function renderEndpoint(endpoint){
   groupsContainer.innerHTML = groups.map(group => `
     <section class="api-group">
       <div class="api-group-header">
-        <h2>${group.title}</h2>
+        <h2>${escapeHtml(group.title)}</h2>
       </div>
       <div class="api-call-grid">
         ${group.endpoints.map(renderEndpoint).join('')}
