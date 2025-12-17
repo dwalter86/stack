@@ -1,8 +1,14 @@
-<!doctype html><html><head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Account</title>
   <link rel="stylesheet" href="/app.css">
-</head><body>
+</head>
+
+<body>
   <header id="site-header"></header>
   <main class="page-container">
     <div class="account-header">
@@ -13,7 +19,8 @@
         </div>
       </div>
       <div class="account-header-actions">
-        <button id="accountMenuButton" class="icon-btn" aria-haspopup="true" aria-expanded="false" aria-label="Account actions">⋯</button>
+        <button id="accountMenuButton" class="icon-btn" aria-haspopup="true" aria-expanded="false"
+          aria-label="Account actions">⋯</button>
         <div id="accountMenu" class="dropdown-menu">
           <button type="button" data-action="edit">Edit account</button>
           <button type="button" data-action="add-section">Add section</button>
@@ -23,7 +30,13 @@
     </div>
 
     <section>
-      <h2 id="sectionsHeading">Sections</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 id="sectionsHeading" style="margin-bottom: 0;">Sections</h2>
+        <div style="flex-grow: 1; display: flex; justify-content: flex-end;">
+          <input type="text" id="sectionSearch" placeholder="Search sections..." class="input"
+            style="width: 100%; max-width: 400px; margin-bottom: 0;">
+        </div>
+      </div>
       <div id="sectionList"></div>
       <div id="emptyState" class="empty-state hidden">
         <p class="small" id="sectionsEmptyCopy">No sections have been created for this account yet.</p>
@@ -37,7 +50,8 @@
         <h2>Create section</h2>
         <form id="sectionForm">
           <p><label>Slug (no spaces)<input type="text" id="sectionSlug" required></label></p>
-          <p><label id="sectionLabelPrompt">Label (display name)<input type="text" id="sectionLabel" required></label></p>
+          <p><label id="sectionLabelPrompt">Label (display name)<input type="text" id="sectionLabel" required></label>
+          </p>
           <div class="modal-actions">
             <button type="button" class="btn" id="sectionCancel">Cancel</button>
             <button type="submit" class="btn primary">Save</button>
@@ -49,4 +63,6 @@
   </main>
   <script type="module" src="/js/auto-updater.js"></script>
   <script type="module" src="/js/account.js"></script>
-</body></html>
+</body>
+
+</html>

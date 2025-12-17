@@ -301,6 +301,8 @@ function saveSortPref(accountId, slug, sortState) {
   const addItemMenuLabel = document.getElementById('addItemMenuLabel');
   const deleteSectionMenuLabel = document.getElementById('deleteSectionMenuLabel');
 
+  const itemSearch = document.getElementById('itemSearch');
+
   const itemModal = document.getElementById('itemModal');
   const itemForm = document.getElementById('itemForm');
   const itemNameInput = document.getElementById('itemName');
@@ -787,17 +789,44 @@ function saveSortPref(accountId, slug, sortState) {
     return `<span class="sort-arrow active" aria-hidden="true">${arrow}</span>`;
   }
 
-  function renderItemsTable() {
+  function renderItemsTable(term = '') {
     const visibleSet = new Set(visibleColumns);
     let activeColumns = columnDefs.filter(c => visibleSet.has(c.key));
     if (Number.isFinite(columnCount) && columnCount > 0) {
       activeColumns = activeColumns.slice(0, columnCount);
     }
-    if (!itemsData.length) {
+
+    let displayItems = itemsData;
+    if (term) {
+      const lowerTerm = term.toLowerCase();
+      displayItems = itemsData.filter(item => {
+        // Check name
+        if ((item.name || '').toLowerCase().includes(lowerTerm)) return true;
+        // Check filtering visible columns? Or just check all data values for simplicity?
+        // Let's check visible columns + basics for now.
+        return activeColumns.some(col => {
+          let val;
+          if (col.key === 'name') val = item.name;
+          else if (col.key === 'created_at') val = item.created_at;
+          else val = (item.data || {})[col.key];
+          return String(val || '').toLowerCase().includes(lowerTerm);
+        });
+      });
+    }
+
+    if (!displayItems.length) {
       itemsTableContainer.innerHTML = '';
       if (itemsEmptyState) {
-        itemsEmptyState.classList.remove('hidden');
+        if (!term && !itemsData.length) {
+          itemsEmptyState.classList.remove('hidden');
+          if (itemsEmptyCopy) itemsEmptyCopy.textContent = `No ${labels.items_label.toLowerCase()} in this ${labels.sections_label.toLowerCase()} yet. Use the menu to add one.`;
+        } else {
+          // Search yielded no results
+          itemsTableContainer.innerHTML = '<p class="small" style="text-align:center">No items match your search.</p>';
+          itemsEmptyState.classList.add('hidden');
+        }
       }
+
       setExportEnabled(false);
       return;
     }
@@ -816,8 +845,7 @@ function saveSortPref(accountId, slug, sortState) {
       return `<th><button type="button" class="sort-toggle" data-key="${escapeHtml(col.key)}" aria-sort="${ariaSort}">${escapeHtml(col.label)} ${renderSortIndicator(col)}</button></th>`;
     }).join('');
 
-    const sortedItems = sortItems(itemsData);
-    const rowsHtml = sortedItems.map(it => {
+    const rowsHtml = sortItems(displayItems).map(it => {
       const cells = [];
       for (const col of activeColumns) {
         if (col.key === 'name') {
@@ -871,7 +899,7 @@ function saveSortPref(accountId, slug, sortState) {
         } else {
           sortState = { key, direction: key === 'created_at' ? 'desc' : 'asc' };
         }
-        renderItemsTable();
+        renderItemsTable(itemSearch ? itemSearch.value : '');
       });
     });
 
@@ -895,7 +923,7 @@ function saveSortPref(accountId, slug, sortState) {
           });
           item.data = updated?.data || updatedData;
           select.setAttribute('data-prev', nextVal);
-          renderItemsTable();
+          renderItemsTable(itemSearch ? itemSearch.value : '');
         } catch (err) {
           select.value = prev;
           alert(err.message || 'Failed to update value');
@@ -928,7 +956,7 @@ function saveSortPref(accountId, slug, sortState) {
         try {
           await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
           itemsData = itemsData.filter(item => item.id !== itemId);
-          renderItemsTable();
+          renderItemsTable(itemSearch ? itemSearch.value : '');
         } catch (err) {
           alert(err.message || 'Failed to delete item');
           btn.disabled = false;
@@ -966,7 +994,7 @@ function saveSortPref(accountId, slug, sortState) {
         return;
       }
       itemsEmptyState.classList.add('hidden');
-      renderItemsTable();
+      renderItemsTable(itemSearch ? itemSearch.value : '');
     } catch (e) {
       itemsTableContainer.innerHTML = `<p class="small">Failed to load items: ${e.message}</p>`;
       itemsEmptyState.classList.add('hidden');
@@ -1071,6 +1099,12 @@ function saveSortPref(accountId, slug, sortState) {
       return; // Don't close immediately so user sees "Saved!"
     }
   });
+
+  if (itemSearch) {
+    itemSearch.addEventListener('input', (e) => {
+      renderItemsTable(e.target.value);
+    });
+  }
 
   await loadSectionMeta();
   await loadItems();

@@ -1,8 +1,14 @@
-<!doctype html><html><head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Section</title>
   <link rel="stylesheet" href="/app.css">
-</head><body>
+</head>
+
+<body>
   <header id="site-header"></header>
   <main class="page-container">
     <div class="account-header">
@@ -14,7 +20,8 @@
         </div>
       </div>
       <div class="account-header-actions">
-        <button id="sectionMenuButton" class="icon-btn" aria-haspopup="true" aria-expanded="false" aria-label="Section actions">⋯</button>
+        <button id="sectionMenuButton" class="icon-btn" aria-haspopup="true" aria-expanded="false"
+          aria-label="Section actions">⋯</button>
         <div id="sectionMenu" class="dropdown-menu">
           <button type="button" data-action="edit" id="editSectionMenuLabel">Edit section</button>
           <button type="button" data-action="settings" id="itemSettingsMenuLabel">Settings</button>
@@ -27,7 +34,13 @@
     </div>
 
     <section class="card">
-      <h2 style="margin:0;" id="itemsHeading">Items</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h2 style="margin:0;" id="itemsHeading">Items</h2>
+        <div style="flex-grow:1;display:flex;justify-content:flex-end;">
+          <input type="text" id="itemSearch" placeholder="Search items..." class="input"
+            style="width:100%;max-width:300px;margin-bottom:0;">
+        </div>
+      </div>
       <div id="itemsEmptyState" class="empty-state hidden">
         <p class="small" id="itemsEmptyCopy">No items in this section yet.</p>
       </div>
@@ -47,7 +60,13 @@
             <p class="small">Define key/value pairs for this item's data.</p>
             <div class="table-wrapper">
               <table class="kv-table">
-                <thead><tr><th>Key</th><th>Value</th><th></th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>Key</th>
+                    <th>Value</th>
+                    <th></th>
+                  </tr>
+                </thead>
                 <tbody id="kvRows"></tbody>
               </table>
             </div>
@@ -67,4 +86,6 @@
   </main>
   <script type="module" src="/js/auto-updater.js"></script>
   <script type="module" src="/js/section.js"></script>
-</body></html>
+</body>
+
+</html>

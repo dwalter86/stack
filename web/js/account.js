@@ -49,6 +49,9 @@ function slugify(val) {
   const sectionLabelInput = document.getElementById('sectionLabel');
   const sectionCancel = document.getElementById('sectionCancel');
 
+  const sectionSearch = document.getElementById('sectionSearch');
+  let allSections = [];
+
   const menuButton = document.getElementById('accountMenuButton');
   const menu = document.getElementById('accountMenu');
   const addSectionMenuBtn = menu ? menu.querySelector('button[data-action="add-section"]') : null;
@@ -124,18 +127,26 @@ function slugify(val) {
     }
   });
 
-  async function loadSections() {
-    try {
-      const sections = await api(`/api/accounts/${accountId}/sections`);
-      if (!sections.length) {
-        sectionListEl.innerHTML = '';
+  function renderSections(term = '') {
+    const filtered = term
+      ? allSections.filter(s => (s.label || '').toLowerCase().includes(term.toLowerCase()) || (s.slug || '').toLowerCase().includes(term.toLowerCase()))
+      : allSections;
+
+    if (!filtered.length) {
+      sectionListEl.innerHTML = '';
+      if (!term && !allSections.length) {
         emptyStateEl.classList.remove('hidden');
-        return;
+      } else {
+        sectionListEl.innerHTML = '<p class="small" style="text-align:center">No sections match your search.</p>';
+        emptyStateEl.classList.add('hidden');
       }
-      emptyStateEl.classList.add('hidden');
-      sectionListEl.innerHTML = sections.map(s => {
-        const slugLine = showSlugs ? `<div class="small"><code>${escapeHtml(s.slug)}</code></div>` : '';
-        return `
+      return;
+    }
+
+    emptyStateEl.classList.add('hidden');
+    sectionListEl.innerHTML = filtered.map(s => {
+      const slugLine = showSlugs ? `<div class="small"><code>${escapeHtml(s.slug)}</code></div>` : '';
+      return `
         <div class="card" style="margin-bottom:8px;">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
             <div>
@@ -148,7 +159,19 @@ function slugify(val) {
           </div>
         </div>
       `;
-      }).join('');
+    }).join('');
+  }
+
+  if (sectionSearch) {
+    sectionSearch.addEventListener('input', (e) => {
+      renderSections(e.target.value);
+    });
+  }
+
+  async function loadSections() {
+    try {
+      allSections = await api(`/api/accounts/${accountId}/sections`);
+      renderSections(sectionSearch ? sectionSearch.value : '');
     } catch (e) {
       sectionListEl.innerHTML = `<p class="small">Failed to load sections: ${escapeHtml(e.message)}</p>`;
       emptyStateEl.classList.add('hidden');
