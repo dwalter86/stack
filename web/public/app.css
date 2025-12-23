@@ -32,7 +32,7 @@ footer {
 header {
   background: #c4c4c4;
   border-bottom: 1px solid var(--border);
-  height: 200px;
+  height: 140px;
 }
 
 footer {
@@ -48,7 +48,7 @@ footer {
 }
 
 .header-bar.container {
-  padding-top: 45px;
+  padding-top: 25px;
 }
 
 .header-bar {
@@ -59,8 +59,29 @@ footer {
 
 .menu {
   display: flex;
-  gap: 8px;
+  gap: 16px;
   align-items: center;
+}
+
+.logo-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: var(--fg);
+  margin-right: 12px;
+}
+
+.logo-img {
+  height: 40px;
+  width: auto;
+  display: block;
+}
+
+.logo-text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .menu a,
@@ -94,7 +115,7 @@ footer {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 5px;
-  margin-top: -115px;
+  margin-top: -65px;
   position: relative;
   background: #fff;
   margin-left: 15px;

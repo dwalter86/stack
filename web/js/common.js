@@ -69,12 +69,13 @@ export function renderShell(user) {
   if (header) {
     header.innerHTML = `
       <div class="container header-bar">
-        <nav class="menu">
-          <a href="/accounts.html">Home</a>
-          ${user?.is_admin ? '<a href="/settings.html">Settings</a>' : ''}
-        </nav>
+        <a href="/accounts.html" class="logo-link">
+          <img src="/logo.png" alt="ILG Forms" class="logo-img">
+          <span class="logo-text">ILG Forms</span>
+        </a>
         <div class="menu" style="margin-left:auto;">
-      <span class="pill small">${escapeHtml(user?.email) || ''}</span>
+          <span class="pill small">${escapeHtml(user?.email) || ''}</span>
+          ${user?.is_admin ? '<a href="/settings.html" class="btn">Settings</a>' : ''}
           <a href="#" id="logoutBtn" class="btn">Logout</a>
         </div>
       </div>`;
