@@ -198,6 +198,34 @@ function slugify(val) {
         method: 'POST',
         body: JSON.stringify({ slug, label: label || slug, schema: {} })
       });
+      // Fire-and-forget webhook with new section details
+      try {
+        fetch('https://n8n.adigi8.app/webhook/4e02f681-fdf6-4dea-a4c8-77dca1d54a5a', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            event: 'section_created',
+            account_id: accountId,
+            section: {
+              slug,
+              label: label || slug,
+              schema: {},
+            },
+            user: {
+              id: me.id,
+              email: me.email,
+            },
+            created_at: new Date().toISOString(),
+            source: 'web_ui',
+          }),
+        }).catch(() => {
+          // Ignore webhook errors so the UI flow is not blocked
+        });
+      } catch {
+        // Ignore synchronous errors from fetch setup
+      }
       sectionMsg.textContent = 'Section saved.';
       closeModal();
       await loadSections();
