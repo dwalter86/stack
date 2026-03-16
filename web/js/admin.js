@@ -67,9 +67,9 @@ const TYPE_LABELS = {
       const name = u.name?.trim() || u.email;
       const canEdit = me.user_type === 'super_admin' || u.user_type !== 'super_admin';
       const canDelete = canEdit && me.id !== u.id;
-
-      const editButton = canEdit ? `<button class="btn small" data-action="edit" data-id="${u.id}">Edit</button>` : '';
-      const deleteButton = canDelete ? `<button class="btn small danger" data-action="delete" data-id="${u.id}">Delete</button>` : '';
+      
+      const editButton = canEdit ? `<button class="btn" data-action="edit" data-id="${u.id}">Edit</button>` : '';
+      const deleteButton = canDelete ? `<button class="btn danger" data-action="delete" data-id="${u.id}">Delete</button>` : '';
       return `
         <div class="card account-card" id="user-card-${u.id}">
           <div>
