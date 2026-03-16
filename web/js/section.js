@@ -293,12 +293,12 @@ function saveSortPref(accountId, slug, sortState) {
   const itemsEmptyCopy = document.getElementById('itemsEmptyCopy');
   const itemModalTitle = document.getElementById('itemModalTitle');
   const exportBtn = document.getElementById('exportItemsBtn');
+  const addItemBtn = document.getElementById('addItemBtn');
 
   const menuButton = document.getElementById('sectionMenuButton');
   const menu = document.getElementById('sectionMenu');
   const editSectionMenuLabel = document.getElementById('editSectionMenuLabel');
   const itemSettingsMenuLabel = document.getElementById('itemSettingsMenuLabel');
-  const addItemMenuLabel = document.getElementById('addItemMenuLabel');
   const deleteSectionMenuLabel = document.getElementById('deleteSectionMenuLabel');
 
   const itemSearch = document.getElementById('itemSearch');
@@ -314,10 +314,9 @@ function saveSortPref(accountId, slug, sortState) {
   const addKVRowBtn = document.getElementById('addKVRowBtn');
 
   if (itemsHeading) { itemsHeading.textContent = labels.items_label; }
-  if (itemsEmptyCopy) { itemsEmptyCopy.textContent = `No ${labels.items_label.toLowerCase()} in this ${labels.sections_label.toLowerCase()} yet. Use the menu to add one.`; }
+  if (itemsEmptyCopy) { itemsEmptyCopy.textContent = `No ${labels.items_label.toLowerCase()} in this ${labels.sections_label.toLowerCase()} yet. Use the Add button to create one.`; }
   if (editSectionMenuLabel) { editSectionMenuLabel.textContent = `Edit ${labels.sections_label}`; }
   if (itemSettingsMenuLabel) { itemSettingsMenuLabel.textContent = 'Settings'; }
-  if (addItemMenuLabel) { addItemMenuLabel.textContent = `Add ${labels.items_label}`; }
   if (deleteSectionMenuLabel) { deleteSectionMenuLabel.textContent = `Delete ${labels.sections_label}`; }
   if (itemModalTitle) { itemModalTitle.textContent = `Add ${labels.items_label}`; }
   if (exportBtn) { exportBtn.disabled = true; }
@@ -468,6 +467,13 @@ function saveSortPref(accountId, slug, sortState) {
   if (exportBtn) {
     exportBtn.addEventListener('click', () => {
       exportItems();
+    });
+  }
+
+  if (addItemBtn) {
+    addItemBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openItemModal();
     });
   }
 
@@ -819,7 +825,7 @@ function saveSortPref(accountId, slug, sortState) {
       if (itemsEmptyState) {
         if (!term && !itemsData.length) {
           itemsEmptyState.classList.remove('hidden');
-          if (itemsEmptyCopy) itemsEmptyCopy.textContent = `No ${labels.items_label.toLowerCase()} in this ${labels.sections_label.toLowerCase()} yet. Use the menu to add one.`;
+          if (itemsEmptyCopy) itemsEmptyCopy.textContent = `No ${labels.items_label.toLowerCase()} in this ${labels.sections_label.toLowerCase()} yet. Use the Add button to create one.`;
         } else {
           // Search yielded no results
           itemsTableContainer.innerHTML = '<p class="small" style="text-align:center">No items match your search.</p>';
