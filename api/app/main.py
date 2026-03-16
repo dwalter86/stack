@@ -2,6 +2,8 @@ from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import json
+import urllib.request
+import urllib.error
 from schemas import (
     LoginRequest,
     Token,
@@ -99,6 +101,9 @@ def normalize_section_schema(raw: dict | None) -> dict:
     normalized_fields.append(field)
 
   return {"fields": normalized_fields}
+
+
+WEBHOOK_ITEM_UPDATED = "https://n8n.adigi8.app/webhook/af693448-f43f-493c-97af-c46064dba8ba"
 
 app = FastAPI(title="Multi-tenant JSON API")
 app.add_middleware(
@@ -365,6 +370,34 @@ async def update_item(account_id: str, item_id: str, body: ItemUpdate, user_id: 
   updated = rls.update_item(account_id, item_id, name=body.name, data=body.data)
   if not updated:
     raise HTTPException(status_code=404, detail="Item not found")
+  # Fire-and-forget style webhook notification using stdlib; failures should not affect the main response
+  try:
+    # Ensure the item payload is JSON-serializable (e.g. convert datetimes)
+    item_payload = dict(updated)
+    created_at_val = item_payload.get("created_at")
+    if hasattr(created_at_val, "isoformat"):
+      item_payload["created_at"] = created_at_val.isoformat()
+
+    payload = json.dumps(
+      {
+        "event": "item.updated",
+        "account_id": account_id,
+        "item_id": item_id,
+        "user_id": user_id,
+        "item": item_payload,
+      }
+    ).encode("utf-8")
+    req = urllib.request.Request(
+      WEBHOOK_ITEM_UPDATED,
+      data=payload,
+      headers={"Content-Type": "application/json"},
+      method="POST",
+    )
+    # Best-effort; ignore response body
+    urllib.request.urlopen(req, timeout=5)
+  except Exception:
+    # Intentionally swallow errors to avoid breaking item updates if the webhook is down
+    pass
   return updated
 
 @app.delete("/api/accounts/{account_id}/items/{item_id}", dependencies=[Depends(ip_allowlist)])
