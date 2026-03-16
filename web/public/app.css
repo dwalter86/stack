@@ -226,6 +226,22 @@ label {
   background: #fff;
 }
 
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.card-header-row h2 {
+  margin: 0;
+}
+
+.collapsible-card.is-collapsed .card-body {
+  display: none;
+}
+
 .stacked-list {
   display: flex;
   flex-direction: column;

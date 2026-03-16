@@ -228,6 +228,23 @@ function reconcileVisibility(columns, stored) {
   const templateMessage = document.getElementById('templateMessage');
   const saveTemplateBtn = document.getElementById('saveTemplateBtn');
 
+  function initCardToggles() {
+    const cards = document.querySelectorAll('.collapsible-card');
+    cards.forEach(card => {
+      const toggle = card.querySelector('.card-toggle');
+      const body = card.querySelector('.card-body');
+      if (!toggle || !body) return;
+      toggle.addEventListener('click', () => {
+        const collapsed = card.classList.toggle('is-collapsed');
+        body.hidden = collapsed;
+        toggle.textContent = collapsed ? 'Show' : 'Hide';
+        toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      });
+    });
+  }
+
+  initCardToggles();
+
   if (backToSection) {
     backToSection.href = `/section.html?account=${encodeURIComponent(accountId)}&slug=${encodeURIComponent(slug)}`;
   }
