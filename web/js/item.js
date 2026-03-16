@@ -195,6 +195,10 @@ function formatDateTime(val) {
 }
 
 (async () => {
+  let currentItem = null;
+  let currentRows = [];
+  let isEditing = false;
+
   const me = await loadMeOrRedirect(); if (!me) return;
   renderShell(me);
   const labels = getLabels(me);
@@ -219,6 +223,9 @@ function formatDateTime(val) {
   const imageModal = document.getElementById('imageModal');
   const imageModalImg = document.getElementById('imageModalImg');
   const imageModalClose = document.getElementById('imageModalClose');
+  const editBtn = document.getElementById('editItemBtn');
+  const cancelBtn = document.getElementById('cancelEditBtn');
+  const saveBtn = document.getElementById('saveEditBtn');
 
   function closeImageModal() {
     if (imageModal) imageModal.classList.add('hidden');
@@ -250,6 +257,205 @@ function formatDateTime(val) {
       if (url) openImageModal(url);
     }
   });
+
+  function setEditing(active) {
+    isEditing = active;
+    if (editBtn) editBtn.classList.toggle('hidden', active);
+    if (cancelBtn) cancelBtn.classList.toggle('hidden', !active);
+    if (saveBtn) saveBtn.classList.toggle('hidden', !active);
+  }
+
+  function renderItem(item) {
+    currentItem = item;
+    const data = item.data || {};
+    const rows = [];
+
+    const templateByKey = new Map(templateFields.map(f => [f.key, f]));
+
+    if (schemaFields.length) {
+      const usedKeys = new Set();
+      for (const f of schemaFields) {
+        const key = f.key;
+        usedKeys.add(key);
+        const tplField = templateByKey.get(key);
+        const label = tplField?.label || f.label || key;
+        const val = data ? data[key] : undefined;
+        rows.push({ key, label, value: val });
+      }
+      if (data && typeof data === 'object') {
+        Object.keys(data).forEach(k => {
+          if (usedKeys.has(k)) return;
+          const tplField = templateByKey.get(k);
+          rows.push({ key: k, label: tplField?.label || k, value: data[k] });
+        });
+      }
+    } else if (templateFields.length) {
+      const usedKeys = new Set();
+      for (const f of templateFields) {
+        const key = f.key;
+        usedKeys.add(key);
+        rows.push({ key, label: (f.label || key), value: data ? data[key] : undefined });
+      }
+      if (data && typeof data === 'object') {
+        Object.keys(data).forEach(k => {
+          if (usedKeys.has(k)) return;
+          rows.push({ key: k, label: k, value: data[k] });
+        });
+      }
+    } else {
+      if (data && typeof data === 'object') {
+        Object.keys(data).forEach(k => {
+          rows.push({ key: k, label: k, value: data[k] });
+        });
+      }
+    }
+
+    currentRows = rows;
+
+    if (!isEditing) {
+      itemNameEl.textContent = item.name;
+
+      if (!rows.length) {
+        itemPropsBody.innerHTML = `<tr><td class="small" colspan="2">No properties for this ${escapeHtml(labels.items_label.toLowerCase())}.</td></tr>`;
+      } else {
+        itemPropsBody.innerHTML = rows.map(r => `
+          <tr>
+            <th>${escapeHtml(r.label)}</th>
+            <td>${renderValueHtml(r.value)}</td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    if (itemRawStructured) {
+      try {
+        itemRawStructured.innerHTML = renderValueHtml(item.data || {});
+      } catch {
+        itemRawStructured.innerHTML = '<span class="small">Unable to render structured view.</span>';
+      }
+    }
+
+    try {
+      itemRaw.textContent = JSON.stringify(item.data || {}, null, 2);
+    } catch {
+      itemRaw.textContent = String(item.data || '');
+    }
+  }
+
+  function enterEditMode() {
+    if (!currentItem || !currentRows.length || isEditing) return;
+    setEditing(true);
+
+    const currentName = currentItem.name || '';
+    itemNameEl.innerHTML = '';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.id = 'itemNameInput';
+    nameInput.value = currentName;
+    nameInput.className = 'item-name-input';
+    itemNameEl.appendChild(nameInput);
+
+    itemPropsBody.innerHTML = currentRows.map(r => {
+      const val = r.value;
+      let raw = '';
+      if (val !== null && val !== undefined) {
+        if (typeof val === 'string') {
+          raw = val;
+        } else {
+          try {
+            raw = JSON.stringify(val);
+          } catch {
+            raw = String(val);
+          }
+        }
+      }
+      return `
+        <tr>
+          <th>${escapeHtml(r.label)}</th>
+          <td>
+            <textarea class="item-edit-input" data-field="${escapeHtml(r.key)}">${escapeHtml(raw)}</textarea>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function exitEditModeWithoutSaving() {
+    setEditing(false);
+    if (currentItem) {
+      itemNameEl.innerHTML = '';
+      itemNameEl.textContent = currentItem.name || '';
+      renderItem(currentItem);
+    }
+  }
+
+  async function saveEdits() {
+    if (!currentItem || !currentRows.length) return;
+
+    const nameInput = document.getElementById('itemNameInput');
+    const newNameRaw = nameInput ? nameInput.value : currentItem.name;
+    const newName = (newNameRaw || '').trim();
+    if (!newName) {
+      alert('Item name cannot be empty.');
+      return;
+    }
+
+    const newData = {};
+    const textareas = itemPropsBody.querySelectorAll('textarea.item-edit-input');
+    currentRows.forEach((row) => {
+      const field = row.key;
+      const ta = Array.from(textareas).find(el => el.dataset.field === field);
+      if (!ta) {
+        newData[field] = (currentItem.data || {})[field];
+        return;
+      }
+      const raw = ta.value;
+      if (!raw.trim()) {
+        newData[field] = null;
+        return;
+      }
+      try {
+        newData[field] = JSON.parse(raw);
+      } catch {
+        newData[field] = raw;
+      }
+    });
+
+    try {
+      const updated = await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: newName, data: newData }),
+      });
+      setEditing(false);
+      itemNameEl.innerHTML = '';
+      renderItem(updated);
+      const sectionLabel = section ? section.label : (sectionSlug || 'No section');
+      const createdCopy = updated.created_at ? ` · Added ${formatDateTime(updated.created_at)}` : '';
+      itemMetaEl.textContent = `${accountName} · ${labels.sections_label}: ${sectionLabel} · id: ${itemId}${createdCopy}`;
+      document.title = `${updated.name} | ${labels.items_label}`;
+    } catch (e) {
+      alert(e.message || 'Failed to save item.');
+    }
+  }
+
+  if (editBtn) {
+    editBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      enterEditMode();
+    });
+  }
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      exitEditModeWithoutSaving();
+    });
+  }
+  if (saveBtn) {
+    saveBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      saveEdits();
+    });
+  }
 
   if (!accountId || !itemId) {
     document.body.innerHTML = '<main class="container"><p>Missing account or item id.</p></main>';
@@ -317,82 +523,11 @@ function formatDateTime(val) {
 
   try {
     const item = await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`);
-    itemNameEl.textContent = item.name;
     const sectionLabel = section ? section.label : (sectionSlug || 'No section');
     const createdCopy = item.created_at ? ` · Added ${formatDateTime(item.created_at)}` : '';
     itemMetaEl.textContent = `${accountName} · ${labels.sections_label}: ${sectionLabel} · id: ${itemId}${createdCopy}`;
     document.title = `${item.name} | ${labels.items_label}`;
-
-    const data = item.data || {};
-    const rows = [];
-
-    // If schema present, respect its order/labels
-    const templateByKey = new Map(templateFields.map(f => [f.key, f]));
-
-    if (schemaFields.length) {
-      const usedKeys = new Set();
-      for (const f of schemaFields) {
-        const key = f.key;
-        usedKeys.add(key);
-        const tplField = templateByKey.get(key);
-        const label = tplField?.label || f.label || key;
-        const val = data ? data[key] : undefined;
-        rows.push({ label, value: val });
-      }
-      // Include any extra keys not in schema at the bottom
-      if (data && typeof data === 'object') {
-        Object.keys(data).forEach(k => {
-          if (usedKeys.has(k)) return;
-          const tplField = templateByKey.get(k);
-          rows.push({ label: tplField?.label || k, value: data[k] });
-        });
-      }
-    } else if (templateFields.length) {
-      const usedKeys = new Set();
-      for (const f of templateFields) {
-        const key = f.key;
-        usedKeys.add(key);
-        rows.push({ label: f.label || key, value: data ? data[key] : undefined });
-      }
-      if (data && typeof data === 'object') {
-        Object.keys(data).forEach(k => {
-          if (usedKeys.has(k)) return;
-          rows.push({ label: k, value: data[k] });
-        });
-      }
-    } else {
-      // No schema: list keys in default object order
-      if (data && typeof data === 'object') {
-        Object.keys(data).forEach(k => {
-          rows.push({ label: k, value: data[k] });
-        });
-      }
-    }
-
-    if (!rows.length) {
-      itemPropsBody.innerHTML = `<tr><td class="small" colspan="2">No properties for this ${escapeHtml(labels.items_label.toLowerCase())}.</td></tr>`;
-    } else {
-      itemPropsBody.innerHTML = rows.map(r => `
-        <tr>
-          <th>${escapeHtml(r.label)}</th>
-          <td>${renderValueHtml(r.value)}</td>
-        </tr>
-      `).join('');
-    }
-
-    if (itemRawStructured) {
-      try {
-        itemRawStructured.innerHTML = renderValueHtml(item.data || {});
-      } catch {
-        itemRawStructured.innerHTML = '<span class="small">Unable to render structured view.</span>';
-      }
-    }
-
-    try {
-      itemRaw.textContent = JSON.stringify(item.data || {}, null, 2);
-    } catch {
-      itemRaw.textContent = String(item.data || '');
-    }
+    renderItem(item);
   } catch (e) {
     itemNameEl.textContent = 'Item not found';
     itemMetaEl.textContent = e.message || 'Failed to load item.';
