@@ -139,30 +139,55 @@ function loadColumnTemplate(accountId, slug) {
   }
 }
 
+function normalizeOptions(raw) {
+  if (Array.isArray(raw)) {
+    return raw.map(o => String(o));
+  }
+  if (raw && typeof raw === 'object') {
+    return Object.values(raw).map(o => String(o));
+  }
+  return [];
+}
+
+function normalizeField(field, idx = 0) {
+  if (!field || typeof field !== 'object') return null;
+  const key = field.key || field.name;
+  if (!key) return null;
+  const type = (field.type || 'string').toLowerCase();
+  const orderRaw = field.order;
+  const parsedOrder = typeof orderRaw === 'number' ? orderRaw : (typeof orderRaw === 'string' ? parseInt(orderRaw, 10) : null);
+  let options = [];
+  if (type === 'dropdown' || type === 'select') {
+    options = normalizeOptions(field.options);
+  }
+  return {
+    key,
+    label: field.label || field.friendlyname || key,
+    type,
+    options,
+    order: Number.isFinite(parsedOrder) ? parsedOrder : null,
+    index: idx,
+  };
+}
+
 function parseTemplate(tpl) {
   if (!tpl || typeof tpl !== 'object') return { fields: [] };
+
+  if (Array.isArray(tpl.fields)) {
+    const normalizedFields = tpl.fields.map((f, idx) => normalizeField(f, idx)).filter(Boolean);
+    normalizedFields.sort((a, b) => {
+      const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.index - b.index;
+    });
+    return { fields: normalizedFields };
+  }
+
   const data = tpl.data && typeof tpl.data === 'object' ? tpl.data : {};
-  const fields = Object.entries(data).map(([key, val], idx) => {
-    const type = (val?.type || 'string').toLowerCase();
-    const orderRaw = val?.order;
-    const parsedOrder = typeof orderRaw === 'number' ? orderRaw : (typeof orderRaw === 'string' ? parseInt(orderRaw, 10) : null);
-    let options = [];
-    if (type === 'dropdown') {
-      if (Array.isArray(val?.options)) {
-        options = val.options.map(o => String(o));
-      } else if (val?.options && typeof val.options === 'object') {
-        options = Object.values(val.options).map(o => String(o));
-      }
-    }
-    return {
-      key,
-      label: val?.friendlyname || key,
-      type,
-      options,
-      order: Number.isFinite(parsedOrder) ? parsedOrder : null,
-      index: idx,
-    };
-  });
+  const fields = Object.entries(data)
+    .map(([key, val], idx) => normalizeField({ key, ...(val || {}) }, idx))
+    .filter(Boolean);
 
   fields.sort((a, b) => {
     const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
@@ -355,6 +380,9 @@ function formatDateTime(val) {
     nameInput.className = 'item-name-input';
     itemNameEl.appendChild(nameInput);
 
+    const templateByKey = new Map(templateFields.map(f => [f.key, f]));
+    const schemaByKey = new Map(schemaFields.map(f => [f.key, f]));
+
     itemPropsBody.innerHTML = currentRows.map(r => {
       const val = r.value;
       let raw = '';
@@ -369,11 +397,32 @@ function formatDateTime(val) {
           }
         }
       }
+
+      const meta = templateByKey.get(r.key) || schemaByKey.get(r.key) || {};
+      const type = (meta.type || 'text').toLowerCase();
+      const options = normalizeOptions(meta.options);
+
+      let controlHtml;
+      if ((type === 'dropdown' || type === 'select') && options.length) {
+        const currentVal = val === undefined || val === null ? '' : String(val);
+        const distinctOptions = [...new Set(options)];
+        if (currentVal && !distinctOptions.includes(currentVal)) {
+          distinctOptions.unshift(currentVal);
+        }
+        const optionsHtml = ['<option value="">Select…</option>', ...distinctOptions.map(o => {
+          const selected = o === currentVal ? ' selected' : '';
+          return `<option value="${escapeHtml(String(o))}"${selected}>${escapeHtml(String(o))}</option>`;
+        })].join('');
+        controlHtml = `<select class="item-edit-input" data-field="${escapeHtml(r.key)}" data-type="dropdown">${optionsHtml}</select>`;
+      } else {
+        controlHtml = `<textarea class="item-edit-input" data-field="${escapeHtml(r.key)}" data-type="text">${escapeHtml(raw)}</textarea>`;
+      }
+
       return `
         <tr>
           <th>${escapeHtml(r.label)}</th>
           <td>
-            <textarea class="item-edit-input" data-field="${escapeHtml(r.key)}">${escapeHtml(raw)}</textarea>
+            ${controlHtml}
           </td>
         </tr>
       `;
@@ -401,15 +450,24 @@ function formatDateTime(val) {
     }
 
     const newData = {};
-    const textareas = itemPropsBody.querySelectorAll('textarea.item-edit-input');
+    const editors = itemPropsBody.querySelectorAll('.item-edit-input');
     currentRows.forEach((row) => {
       const field = row.key;
-      const ta = Array.from(textareas).find(el => el.dataset.field === field);
-      if (!ta) {
+      const el = Array.from(editors).find(node => node.dataset.field === field);
+      if (!el) {
         newData[field] = (currentItem.data || {})[field];
         return;
       }
-      const raw = ta.value;
+
+      const type = (el.dataset.type || '').toLowerCase();
+
+      if (el.tagName === 'SELECT' || type === 'dropdown') {
+        const raw = el.value;
+        newData[field] = raw ? raw : null;
+        return;
+      }
+
+      const raw = el.value;
       if (!raw.trim()) {
         newData[field] = null;
         return;
