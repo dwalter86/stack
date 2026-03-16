@@ -344,14 +344,26 @@ function saveSortPref(accountId, slug, sortState) {
   const savedSort = loadSortPref(accountId, slug);
   let sortState = savedSort || { key: 'created_at', direction: 'desc' };
 
+  function getSchemaFields() {
+    const latestTemplate = parseTemplate(loadColumnTemplate(accountId, slug));
+    if (latestTemplate.fields && latestTemplate.fields.length) {
+      return latestTemplate.fields;
+    }
+    if (currentSection && currentSection.schema) {
+      const fromSchema = parseTemplate(currentSection.schema).fields || [];
+      if (fromSchema.length) return fromSchema;
+    }
+    return schemaFields || [];
+  }
+
   async function loadSectionMeta() {
     try {
       const section = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`);
       currentSection = section;
       titleEl.textContent = section.label;
       metaEl.textContent = showSlugs ? `${accountName} · slug: ${section.slug}` : accountName;
-      const s = section.schema || {};
-      const apiFields = Array.isArray(s.fields) ? s.fields : [];
+      const schema = section.schema || {};
+      const apiFields = parseTemplate(schema).fields || [];
       schemaFields = templateFromPrefs.fields.length ? templateFromPrefs.fields : apiFields;
       document.title = `${section.label} | ${labels.sections_label}`;
     } catch {
@@ -394,9 +406,24 @@ function saveSortPref(accountId, slug, sortState) {
   function openItemModal() {
     itemMsg.textContent = '';
     itemForm.reset();
-    // Setup UI depending on schema
-    if (schemaFields && schemaFields.length) {
-      const ordered = orderFields(schemaFields);
+    // Setup UI depending on schema or inferred columns
+    let fieldsForForm = getSchemaFields();
+    if (!fieldsForForm || !fieldsForForm.length) {
+      const visibleSet = new Set(visibleColumns);
+      const inferred = columnDefs
+        .filter(c => c.key !== 'name' && c.key !== 'created_at' && visibleSet.has(c.key))
+        .map((c, idx) => ({
+          key: c.key,
+          label: c.label || c.key,
+          type: 'string',
+          options: [],
+          order: idx,
+        }));
+      fieldsForForm = inferred;
+    }
+
+    if (fieldsForForm && fieldsForForm.length) {
+      const ordered = orderFields(fieldsForForm);
       schemaFieldsContainer.innerHTML = ordered.map(f => {
         const type = (f.type || 'text').toLowerCase();
         const required = f.required ? 'required' : '';
@@ -1019,11 +1046,12 @@ function saveSortPref(accountId, slug, sortState) {
     }
 
     let data = {};
-    if (schemaFields && schemaFields.length) {
-      const inputs = schemaFieldsContainer.querySelectorAll('[data-key]');
-      inputs.forEach(el => {
+    const keyedInputs = schemaFieldsContainer.querySelectorAll('[data-key]');
+    if (keyedInputs.length) {
+      keyedInputs.forEach(el => {
         const key = el.getAttribute('data-key');
         const type = (el.getAttribute('data-type') || 'text').toLowerCase();
+        if (!key) return;
         if (type === 'checkbox') {
           data[key] = el.checked;
         } else {
