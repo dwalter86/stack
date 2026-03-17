@@ -47,18 +47,21 @@
     <!-- Modal for creating a section -->
     <div id="sectionModal" class="modal-backdrop hidden">
       <div class="modal">
-        <h2>Create section</h2>
+        <h2 id="sectionModalTitle">Create section</h2>
         <form id="sectionForm">
           <p>
             <label id="sectionLabelPrompt">Label (display name)
               <input type="text" id="sectionLabel" required>
             </label>
           </p>
-          <p>
-            <label>Slug (no spaces)
-              <input type="text" id="sectionSlug" required>
-            </label>
-          </p>
+          <details class="small">
+            <summary>Slug (auto-generated)</summary>
+            <p style="margin-top:0.5rem;">
+              <label>Slug
+                <input type="text" id="sectionSlug" required>
+              </label>
+            </p>
+          </details>
           <div class="modal-actions">
             <button type="button" class="btn" id="sectionCancel">Cancel</button>
             <button type="submit" class="btn primary">Save</button>
