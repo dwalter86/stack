@@ -5,6 +5,24 @@ function qs(name) {
   return m && decodeURIComponent(m);
 }
 
+function generateSectionSlug() {
+  const now = new Date();
+  const pad = (n, len = 2) => String(n).padStart(len, '0');
+  const day = pad(now.getDate());
+  const month = pad(now.getMonth() + 1);
+  const year = now.getFullYear();
+  const hours = pad(now.getHours());
+  const minutes = pad(now.getMinutes());
+  const seconds = pad(now.getSeconds());
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let prefix = '';
+  for (let i = 0; i < 4; i++) {
+    prefix += letters[Math.floor(Math.random() * letters.length)];
+  }
+  const randomTail = String(Math.floor(Math.random() * 1e8)).padStart(8, '0');
+  return `${prefix}-${day}${month}${year}-${hours}${minutes}${seconds}-${randomTail}`;
+}
+
 function slugify(val) {
   const s = (val || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   return s || 'section';
@@ -101,8 +119,17 @@ function slugify(val) {
   function openModal() {
     sectionMsg.textContent = '';
     sectionForm.reset();
+    const autoSlug = generateSectionSlug();
+    if (sectionSlugInput) {
+      sectionSlugInput.value = autoSlug;
+      sectionSlugInput.readOnly = true;
+    }
     modal.classList.remove('hidden');
-    setTimeout(() => sectionSlugInput.focus(), 0);
+    setTimeout(() => {
+      if (sectionLabelInput) {
+        sectionLabelInput.focus();
+      }
+    }, 0);
   }
 
   function closeModal() {
@@ -193,9 +220,9 @@ function slugify(val) {
   sectionForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     sectionMsg.textContent = 'Saving…';
-    const rawSlug = sectionSlugInput.value;
+    const rawSlug = sectionSlugInput.value || generateSectionSlug();
     const label = sectionLabelInput.value.trim();
-    const slug = slugify(rawSlug);
+    const slug = rawSlug.trim() || generateSectionSlug();
 
     if (slug === 'default') {
       sectionMsg.textContent = '"default" is reserved. Choose another slug.';
