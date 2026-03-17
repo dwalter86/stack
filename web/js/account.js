@@ -55,9 +55,11 @@ function slugify(val) {
   const menuButton = document.getElementById('accountMenuButton');
   const menu = document.getElementById('accountMenu');
   const addSectionMenuBtn = menu ? menu.querySelector('button[data-action="add-section"]') : null;
+  const addSectionBtn = document.getElementById('addSectionBtn');
 
   if (emptyCreateBtn) { emptyCreateBtn.textContent = `Create a ${labels.sections_label}`; }
   if (addSectionMenuBtn) { addSectionMenuBtn.textContent = `Add ${labels.sections_label}`; }
+  if (addSectionBtn) { addSectionBtn.textContent = `Add ${labels.sections_label}`; }
 
   let accountName = `Account ${accountId}`;
 
@@ -110,6 +112,13 @@ function slugify(val) {
 
   if (emptyCreateBtn) {
     emptyCreateBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openModal();
+    });
+  }
+
+  if (addSectionBtn) {
+    addSectionBtn.addEventListener('click', (e) => {
       e.preventDefault();
       openModal();
     });
