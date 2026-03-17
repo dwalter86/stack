@@ -75,6 +75,8 @@ function slugify(val) {
   const addSectionMenuBtn = menu ? menu.querySelector('button[data-action="add-section"]') : null;
   const addSectionBtn = document.getElementById('addSectionBtn');
 
+  const isReadOnly = me.user_type === 'standard';
+
   if (emptyCreateBtn) { emptyCreateBtn.textContent = `Create a ${labels.sections_label}`; }
   if (addSectionMenuBtn) { addSectionMenuBtn.textContent = `Add ${labels.sections_label}`; }
   if (addSectionBtn) { addSectionBtn.textContent = `Add ${labels.sections_label}`; }
@@ -138,17 +140,25 @@ function slugify(val) {
   }
 
   if (emptyCreateBtn) {
-    emptyCreateBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      openModal();
-    });
+    if (isReadOnly) {
+      emptyCreateBtn.classList.add('hidden');
+    } else {
+      emptyCreateBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        openModal();
+      });
+    }
   }
 
   if (addSectionBtn) {
-    addSectionBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      openModal();
-    });
+    if (isReadOnly) {
+      addSectionBtn.classList.add('hidden');
+    } else {
+      addSectionBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        openModal();
+      });
+    }
   }
 
   sectionCancel.addEventListener('click', (e) => {
@@ -276,6 +286,11 @@ function slugify(val) {
     if (!btn) return;
     const action = btn.dataset.action;
     closeMenu();
+
+    if (isReadOnly && (action === 'add-section' || action === 'edit' || action === 'delete')) {
+      alert('You have read-only access and cannot modify this account or its sections.');
+      return;
+    }
 
     if (action === 'add-section') {
       openModal();

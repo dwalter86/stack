@@ -19,6 +19,8 @@ import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences, escapeHt
   const menuButton = document.getElementById('accountsMenuButton');
   const menu = document.getElementById('accountsMenu');
 
+  const isReadOnly = me.user_type === 'standard';
+
   function openMenu() {
     menu.classList.add('open');
     menuButton.setAttribute('aria-expanded', 'true');
@@ -98,11 +100,16 @@ import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences, escapeHt
     }
   }
 
+  if (menu) {
   menu.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
     const action = btn.dataset.action;
     closeMenu();
+    if (isReadOnly) {
+      alert('You have read-only access and cannot create new accounts.');
+      return;
+    }
     if (action === 'add-account') {
       const name = prompt('Account name');
       if (!name) return;
@@ -116,6 +123,7 @@ import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences, escapeHt
       }
     }
   });
+  }
 
   await loadAccounts();
 })();

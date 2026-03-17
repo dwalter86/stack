@@ -313,6 +313,8 @@ function saveSortPref(accountId, slug, sortState) {
   const kvRowsTbody = document.getElementById('kvRows');
   const addKVRowBtn = document.getElementById('addKVRowBtn');
 
+  const isReadOnly = me.user_type === 'standard';
+
   if (itemsHeading) { itemsHeading.textContent = labels.items_label; }
   if (itemsEmptyCopy) { itemsEmptyCopy.textContent = `No ${labels.items_label.toLowerCase()} in this ${labels.sections_label.toLowerCase()} yet. Use the Add button to create one.`; }
   if (editSectionMenuLabel) { editSectionMenuLabel.textContent = `Edit ${labels.sections_label}`; }
@@ -492,16 +494,26 @@ function saveSortPref(accountId, slug, sortState) {
   }
 
   if (exportBtn) {
-    exportBtn.addEventListener('click', () => {
-      exportItems();
-    });
+    if (isReadOnly) {
+      exportBtn.disabled = true;
+      exportBtn.classList.add('hidden');
+    } else {
+      exportBtn.addEventListener('click', () => {
+        exportItems();
+      });
+    }
   }
 
   if (addItemBtn) {
-    addItemBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      openItemModal();
-    });
+    if (isReadOnly) {
+      addItemBtn.disabled = true;
+      addItemBtn.classList.add('hidden');
+    } else {
+      addItemBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        openItemModal();
+      });
+    }
   }
 
   function buildColumnDefs(items) {
@@ -912,7 +924,9 @@ function saveSortPref(accountId, slug, sortState) {
         `<span class="comment-label">Comments</span>` +
         `<span class="${commentCountClass}" aria-hidden="true">${escapeHtml(String(commentCount))}</span>` +
         `</a>`;
-      const deleteBtn = `<button type="button" class="btn danger" data-action="delete-item" data-item-id="${escapeHtml(it.id)}">Delete</button>`;
+      const deleteBtn = isReadOnly
+        ? ''
+        : `<button type="button" class="btn danger" data-action="delete-item" data-item-id="${escapeHtml(it.id)}">Delete</button>`;
       cells.push(`<td style="width:1%;white-space:nowrap;">` +
         `<a class="btn" href="${viewHref}">View</a> ` +
         `${commentsBtn} ` +
@@ -950,6 +964,9 @@ function saveSortPref(accountId, slug, sortState) {
           if (!item) throw new Error('Item not found');
           const updatedData = { ...(item.data || {}) };
           updatedData[key] = nextVal;
+          if (isReadOnly) {
+            throw new Error('You have read-only access and cannot update items.');
+          }
           const updated = await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`, {
             method: 'PUT',
             body: JSON.stringify({ name: item.name || '', data: updatedData }),
@@ -971,6 +988,10 @@ function saveSortPref(accountId, slug, sortState) {
       btn.addEventListener('click', async () => {
         const itemId = btn.getAttribute('data-item-id');
         if (!itemId) return;
+        if (isReadOnly) {
+          alert('You have read-only access and cannot delete items.');
+          return;
+        }
         const matchedItem = itemsData.find(item => item.id === itemId);
         const itemName = matchedItem?.name?.trim() || '';
         const labelSource = (labels.items_label || 'Items').trim();
@@ -1115,6 +1136,11 @@ function saveSortPref(accountId, slug, sortState) {
     if (!btn) return;
     const action = btn.dataset.action;
     closeMenu();
+
+    if (isReadOnly && (action === 'add-item' || action === 'edit' || action === 'delete' || action === 'settings')) {
+      alert('You have read-only access and cannot modify this section.');
+      return;
+    }
 
     if (action === 'add-item') {
       openItemModal();

@@ -34,6 +34,18 @@ async def require_admin(user_id: str = Depends(current_user)) -> dict:
     raise HTTPException(status_code=403, detail="Admin only")
   return {"id": user_id, "user_type": user_type}
 
+async def require_editor(user_id: str = Depends(current_user)) -> dict:
+  """
+  Enforce that the current user is allowed to perform write operations.
+
+  Standard users are treated as strictly read-only; only admin and
+  super_admin user types may create, update, or delete resources.
+  """
+  user_type = _get_user_type(user_id)
+  if user_type == "standard":
+    raise HTTPException(status_code=403, detail="Read-only user")
+  return {"id": user_id, "user_type": user_type}
+
 async def require_super_admin(user_id: str = Depends(current_user)) -> dict:
   user_type = _get_user_type(user_id)
   if user_type != "super_admin":

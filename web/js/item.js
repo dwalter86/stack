@@ -252,6 +252,8 @@ function formatDateTime(val) {
   const cancelBtn = document.getElementById('cancelEditBtn');
   const saveBtn = document.getElementById('saveEditBtn');
 
+  const isReadOnly = me.user_type === 'standard';
+
   function closeImageModal() {
     if (imageModal) imageModal.classList.add('hidden');
     if (imageModalImg) imageModalImg.src = '';
@@ -284,6 +286,9 @@ function formatDateTime(val) {
   });
 
   function setEditing(active) {
+    if (isReadOnly) {
+      active = false;
+    }
     isEditing = active;
     if (editBtn) editBtn.classList.toggle('hidden', active);
     if (cancelBtn) cancelBtn.classList.toggle('hidden', !active);
@@ -368,6 +373,10 @@ function formatDateTime(val) {
   }
 
   function enterEditMode() {
+    if (isReadOnly) {
+      alert('You have read-only access and cannot edit items.');
+      return;
+    }
     if (!currentItem || !currentRows.length || isEditing) return;
     setEditing(true);
 
@@ -439,6 +448,10 @@ function formatDateTime(val) {
   }
 
   async function saveEdits() {
+    if (isReadOnly) {
+      alert('You have read-only access and cannot edit items.');
+      return;
+    }
     if (!currentItem || !currentRows.length) return;
 
     const nameInput = document.getElementById('itemNameInput');
@@ -497,6 +510,9 @@ function formatDateTime(val) {
   }
 
   if (editBtn) {
+    if (isReadOnly) {
+      editBtn.classList.add('hidden');
+    }
     editBtn.addEventListener('click', (e) => {
       e.preventDefault();
       enterEditMode();

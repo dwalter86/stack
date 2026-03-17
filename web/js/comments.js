@@ -84,6 +84,14 @@ document.addEventListener('DOMContentLoaded', () => {
         renderShell(me);
         await loadItemDetails(me);
         await loadComments();
-        commentForm.addEventListener('submit', handleFormSubmit);
+        if (me.user_type === 'standard') {
+            commentForm.classList.add('hidden');
+            const notice = document.createElement('p');
+            notice.className = 'small';
+            notice.textContent = 'You have read-only access and cannot add comments.';
+            commentForm.parentNode.insertBefore(notice, commentForm);
+        } else {
+            commentForm.addEventListener('submit', handleFormSubmit);
+        }
     })();
 });

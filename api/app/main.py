@@ -27,7 +27,7 @@ from schemas import (
     ItemUpdate,
 )
 from auth import login_and_get_user, create_token, memberships_for_user
-from deps import current_user, ip_allowlist, require_admin
+from deps import current_user, ip_allowlist, require_admin, require_editor
 import rls
 from sqlalchemy import text
 from database import SessionLocal
@@ -146,7 +146,7 @@ async def read_preferences(user_id: str = Depends(current_user)):
     prefs = get_preferences(db, user_id)
     return Preferences(**prefs)
 
-@app.put("/api/me/preferences", response_model=Preferences, dependencies=[Depends(ip_allowlist)])
+@app.put("/api/me/preferences", response_model=Preferences, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def update_preferences(body: PreferencesUpdate, user_id: str = Depends(current_user)):
   updates: dict[str, str | bool] = {}
   for field in ("accounts_label", "sections_label", "items_label"):
@@ -170,7 +170,7 @@ async def update_preferences(body: PreferencesUpdate, user_id: str = Depends(cur
 async def my_accounts(user_id: str = Depends(current_user)):
   return memberships_for_user(user_id)
 
-@app.post("/api/accounts", response_model=AccountOut, status_code=201, dependencies=[Depends(ip_allowlist)])
+@app.post("/api/accounts", response_model=AccountOut, status_code=201, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def create_account(body: AccountCreate, user_id: str = Depends(current_user)):
   name = body.name.strip()
   if not name:
@@ -248,7 +248,7 @@ async def create_account(body: AccountCreate, user_id: str = Depends(current_use
 
 # --- Account management ---
 
-@app.put("/api/accounts/{account_id}", response_model=AccountOut, dependencies=[Depends(ip_allowlist)])
+@app.put("/api/accounts/{account_id}", response_model=AccountOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def update_account(account_id: str, body: AccountUpdate, user_id: str = Depends(current_user)):
   with SessionLocal() as db:
     row = db.execute(
@@ -260,7 +260,7 @@ async def update_account(account_id: str, body: AccountUpdate, user_id: str = De
     db.commit()
     return AccountOut(id=row[0], name=row[1])
 
-@app.delete("/api/accounts/{account_id}", dependencies=[Depends(ip_allowlist)])
+@app.delete("/api/accounts/{account_id}", dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def delete_account(account_id: str, user_id: str = Depends(current_user)):
   schema_name = f"tenant_{account_id.replace('-', '')}"
   with SessionLocal() as db:
@@ -286,7 +286,7 @@ async def list_sections(account_id: str, user_id: str = Depends(current_user)):
     """), {"a": account_id}).all()
     return [SectionOut(id=r[0], slug=r[1], label=r[2], schema=normalize_section_schema(r[3])) for r in rows]
 
-@app.post("/api/accounts/{account_id}/sections", response_model=SectionOut, dependencies=[Depends(ip_allowlist)])
+@app.post("/api/accounts/{account_id}/sections", response_model=SectionOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def create_section(account_id: str, body: SectionCreate, user_id: str = Depends(current_user)):
   payload = json.dumps(normalize_section_schema(body.schema))
   with SessionLocal() as db:
@@ -314,7 +314,7 @@ async def get_section(account_id: str, slug: str, user_id: str = Depends(current
       raise HTTPException(status_code=404, detail="Section not found")
     return SectionOut(id=row[0], slug=row[1], label=row[2], schema=normalize_section_schema(row[3]))
 
-@app.put("/api/accounts/{account_id}/sections/{slug}", response_model=SectionOut, dependencies=[Depends(ip_allowlist)])
+@app.put("/api/accounts/{account_id}/sections/{slug}", response_model=SectionOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def update_section(account_id: str, slug: str, body: SectionUpdate, user_id: str = Depends(current_user)):
   payload = json.dumps(normalize_section_schema(body.schema))
   with SessionLocal() as db:
@@ -330,7 +330,7 @@ async def update_section(account_id: str, slug: str, body: SectionUpdate, user_i
     db.commit()
     return SectionOut(id=row[0], slug=row[1], label=row[2], schema=normalize_section_schema(row[3]))
 
-@app.delete("/api/accounts/{account_id}/sections/{slug}", dependencies=[Depends(ip_allowlist)])
+@app.delete("/api/accounts/{account_id}/sections/{slug}", dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def delete_section(account_id: str, slug: str, user_id: str = Depends(current_user)):
   schema_name = f"tenant_{account_id.replace('-', '')}"
   with SessionLocal() as db:
@@ -351,7 +351,7 @@ async def list_items_default(account_id: str, limit: int = Query(50, ge=1, le=20
   next_cursor = items[-1]["id"] if items and len(items) == limit else None
   return ItemsPage(items=items, next=next_cursor)
 
-@app.post("/api/accounts/{account_id}/items", response_model=ItemOut, dependencies=[Depends(ip_allowlist)])
+@app.post("/api/accounts/{account_id}/items", response_model=ItemOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def create_item_default(account_id: str, body: ItemCreate, user_id: str = Depends(current_user)):
   return rls.create_item(account_id, section="default", name=body.name, data=body.data)
 
@@ -362,7 +362,7 @@ async def get_item(account_id: str, item_id: str, user_id: str = Depends(current
     raise HTTPException(status_code=404, detail="Item not found")
   return ItemOut(id=item["id"], name=item["name"], data=item["data"], created_at=item["created_at"])
 
-@app.put("/api/accounts/{account_id}/items/{item_id}", response_model=ItemOut, dependencies=[Depends(ip_allowlist)])
+@app.put("/api/accounts/{account_id}/items/{item_id}", response_model=ItemOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def update_item(account_id: str, item_id: str, body: ItemUpdate, user_id: str = Depends(current_user)):
   if body.name is None and body.data is None:
     raise HTTPException(status_code=400, detail="At least one field must be provided for update")
@@ -400,7 +400,7 @@ async def update_item(account_id: str, item_id: str, body: ItemUpdate, user_id: 
     pass
   return updated
 
-@app.delete("/api/accounts/{account_id}/items/{item_id}", dependencies=[Depends(ip_allowlist)])
+@app.delete("/api/accounts/{account_id}/items/{item_id}", dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def delete_item(account_id: str, item_id: str, user_id: str = Depends(current_user)):
   rls.delete_item(account_id, item_id)
   return {"ok": True}
@@ -411,7 +411,7 @@ async def list_section_items(account_id: str, slug: str, limit: int = Query(50, 
   next_cursor = items[-1]["id"] if items and len(items) == limit else None
   return ItemsPage(items=items, next=next_cursor)
 
-@app.post("/api/accounts/{account_id}/sections/{slug}/items", response_model=ItemOut, dependencies=[Depends(ip_allowlist)])
+@app.post("/api/accounts/{account_id}/sections/{slug}/items", response_model=ItemOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def create_section_item(account_id: str, slug: str, body: ItemCreate, user_id: str = Depends(current_user)):
   return rls.create_item(account_id, section=slug, name=body.name, data=body.data)
 
@@ -421,7 +421,7 @@ async def create_section_item(account_id: str, slug: str, body: ItemCreate, user
 async def list_item_comments(account_id: str, item_id: str, user_id: str = Depends(current_user)):
   return rls.list_comments(account_id, item_id)
 
-@app.post("/api/accounts/{account_id}/items/{item_id}/comments", response_model=CommentOut, status_code=201, dependencies=[Depends(ip_allowlist)])
+@app.post("/api/accounts/{account_id}/items/{item_id}/comments", response_model=CommentOut, status_code=201, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def create_item_comment(account_id: str, item_id: str, body: CommentCreate, user_id: str = Depends(current_user)):
   with SessionLocal() as db:
     user_row = db.execute(text("SELECT COALESCE(name, email) FROM users WHERE id = :u"), {"u": user_id}).first()
