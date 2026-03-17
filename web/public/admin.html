@@ -15,14 +15,6 @@
       </div>
     </div>
 
-    <section>
-      <div id="usersEmptyState" class="empty-state hidden">
-        <p class="small">No users yet.</p>
-        <p><a class="btn" href="/admin-add.html">Add user</a></p>
-      </div>
-      <div id="userList" class="stacked-list"></div>
-    </section>
-
     <section class="card" style="margin-top:16px;">
       <h2 style="margin-top:0;">User types</h2>
       <ul>
@@ -31,6 +23,13 @@
         <li><strong>Standard user:</strong> Access allocated accounts, sections, and items only; no access to settings.</li>
       </ul>
       <p class="small">Customised label settings for users are only visible to super admins.</p>
+    </section>
+    <section>
+      <div id="usersEmptyState" class="empty-state hidden">
+        <p class="small">No users yet.</p>
+        <p><a class="btn" href="/admin-add.html">Add user</a></p>
+      </div>
+      <div id="userList" class="stacked-list"></div>
     </section>
     <!-- Add this to your admin.html file -->
 <div id="editUserModal" class="modal hidden">

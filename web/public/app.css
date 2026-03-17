@@ -256,6 +256,10 @@ label {
   gap: 12px;
 }
 
+.account-card-user {
+  display: block;
+}
+
 .account-card strong {
   font-size: 1.05em;
 }

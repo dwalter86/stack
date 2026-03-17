@@ -67,20 +67,24 @@ const TYPE_LABELS = {
       const name = u.name?.trim() || u.email;
       const canEdit = me.user_type === 'super_admin' || u.user_type !== 'super_admin';
       const canDelete = canEdit && me.id !== u.id;
-      
+
       const editButton = canEdit ? `<button class="btn" data-action="edit" data-id="${u.id}">Edit</button>` : '';
       const deleteButton = canDelete ? `<button class="btn danger" data-action="delete" data-id="${u.id}">Delete</button>` : '';
       return `
-        <div class="card account-card" id="user-card-${u.id}">
-          <div>
-            <strong>${escapeHtml(name)}</strong>
-            <div class="small">${escapeHtml(u.email)}</div>
-            <div class="small">${escapeHtml(typeLabel)} • ${status}</div>
-            ${prefs}
-          </div>
-          <div class="card-actions">
-            ${editButton}
-            ${deleteButton}
+        <div class="card account-card account-card-user" id="user-card-${u.id}">
+          <div style="display:flex;align-items:flex-start;gap:16px;">
+            <div style="min-width:0;">
+              <strong>${escapeHtml(name)}</strong>
+              <div class="small">${escapeHtml(u.email)}</div>
+              <div class="small">${escapeHtml(typeLabel)} • ${status}</div>
+            </div>
+            <div style="flex:1;min-width:0;text-align:left;">
+              ${prefs}
+            </div>
+            <div class="card-actions" style="white-space:nowrap;margin-left:auto;">
+              ${editButton}
+              ${deleteButton}
+            </div>
           </div>
         </div>
       `;
