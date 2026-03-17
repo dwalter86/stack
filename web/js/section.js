@@ -1072,10 +1072,35 @@ function saveSortPref(accountId, slug, sortState) {
     }
 
     try {
-      await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}/items`, {
+      const createdItem = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}/items`, {
         method: 'POST',
         body: JSON.stringify({ name, data })
       });
+      // Fire-and-forget webhook with new item details
+      try {
+        fetch('https://n8n.adigi8.app/webhook/415312f7-a131-40cc-b86b-d9e51604a99e', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            event: 'item_created',
+            account_id: accountId,
+            section_slug: slug,
+            item: createdItem || { name, data },
+            user: {
+              id: me.id,
+              email: me.email,
+            },
+            created_at: new Date().toISOString(),
+            source: 'web_ui',
+          }),
+        }).catch(() => {
+          // Ignore webhook errors so the UI flow is not blocked
+        });
+      } catch {
+        // Ignore synchronous errors from fetch setup
+      }
       itemMsg.textContent = 'Item added.';
       closeItemModal();
       await loadItems();
