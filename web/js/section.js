@@ -1097,6 +1097,7 @@ function saveSortPref(accountId, slug, sortState) {
         method: 'POST',
         body: JSON.stringify({ name, data })
       });
+      const sectionName = (currentSection && currentSection.label) ? currentSection.label : slug;
       // Fire-and-forget webhook with new item details
       try {
         fetch('https://n8n.adigi8.app/webhook/415312f7-a131-40cc-b86b-d9e51604a99e', {
@@ -1108,6 +1109,7 @@ function saveSortPref(accountId, slug, sortState) {
             event: 'item_created',
             account_id: accountId,
             section_slug: slug,
+            section_name: sectionName,
             item: createdItem || { name, data },
             user: {
               id: me.id,
