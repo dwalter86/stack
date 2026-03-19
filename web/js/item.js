@@ -495,6 +495,7 @@ function formatDateTime(val) {
     try {
       const updated = await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`, {
         method: 'PUT',
+        headers: { 'X-Update-Source': 'web-ui' },
         body: JSON.stringify({ name: newName, data: newData }),
       });
       setEditing(false);

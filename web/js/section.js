@@ -969,6 +969,7 @@ function saveSortPref(accountId, slug, sortState) {
           }
           const updated = await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`, {
             method: 'PUT',
+            headers: { 'X-Update-Source': 'web-ui' },
             body: JSON.stringify({ name: item.name || '', data: updatedData }),
           });
           item.data = updated?.data || updatedData;
