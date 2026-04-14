@@ -277,7 +277,7 @@ function itemZoomPrefKey(accountId, slug) {
 function normalizeZoomValue(value) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return 100;
-  return Math.max(80, Math.min(140, parsed));
+  return Math.max(10, Math.min(200, parsed));
 }
 
 function loadItemZoom(accountId, slug) {
@@ -395,10 +395,10 @@ function saveItemZoom(accountId, slug, zoomPercent) {
       itemsZoomResetBtn.disabled = normalized === 100;
     }
     if (itemsZoomOutBtn) {
-      itemsZoomOutBtn.disabled = normalized <= 80;
+      itemsZoomOutBtn.disabled = normalized <= 10;
     }
     if (itemsZoomInBtn) {
-      itemsZoomInBtn.disabled = normalized >= 140;
+      itemsZoomInBtn.disabled = normalized >= 200;
     }
   }
 
