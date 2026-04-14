@@ -270,6 +270,33 @@ function saveSortPref(accountId, slug, sortState) {
   }
 }
 
+function itemZoomPrefKey(accountId, slug) {
+  return `itemZoom:${accountId}:${slug || 'default'}`;
+}
+
+function normalizeZoomValue(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return 100;
+  return Math.max(80, Math.min(140, parsed));
+}
+
+function loadItemZoom(accountId, slug) {
+  try {
+    const raw = localStorage.getItem(itemZoomPrefKey(accountId, slug));
+    return normalizeZoomValue(raw);
+  } catch {
+    return 100;
+  }
+}
+
+function saveItemZoom(accountId, slug, zoomPercent) {
+  try {
+    localStorage.setItem(itemZoomPrefKey(accountId, slug), String(normalizeZoomValue(zoomPercent)));
+  } catch {
+    // ignore
+  }
+}
+
 (async () => {
   const me = await loadMeOrRedirect(); if (!me) return;
   renderShell(me);
@@ -302,6 +329,9 @@ function saveSortPref(accountId, slug, sortState) {
   const deleteSectionMenuLabel = document.getElementById('deleteSectionMenuLabel');
 
   const itemSearch = document.getElementById('itemSearch');
+  const itemsZoomOutBtn = document.getElementById('itemsZoomOutBtn');
+  const itemsZoomResetBtn = document.getElementById('itemsZoomResetBtn');
+  const itemsZoomInBtn = document.getElementById('itemsZoomInBtn');
 
   const itemModal = document.getElementById('itemModal');
   const itemForm = document.getElementById('itemForm');
@@ -345,6 +375,38 @@ function saveSortPref(accountId, slug, sortState) {
   let columnCount = null;
   const savedSort = loadSortPref(accountId, slug);
   let sortState = savedSort || { key: 'created_at', direction: 'desc' };
+  let itemZoom = loadItemZoom(accountId, slug);
+
+  function applyItemZoom() {
+    const normalized = normalizeZoomValue(itemZoom);
+    const scale = normalized / 100;
+    const cellPaddingY = Math.round(8 * scale);
+    const cellPaddingX = Math.round(8 * scale);
+
+    if (itemsTableContainer) {
+      itemsTableContainer.classList.add('items-table-scaled');
+      itemsTableContainer.style.setProperty('--items-zoom-scale', scale.toFixed(2));
+      itemsTableContainer.style.setProperty('--items-cell-padding-y', `${cellPaddingY}px`);
+      itemsTableContainer.style.setProperty('--items-cell-padding-x', `${cellPaddingX}px`);
+    }
+
+    if (itemsZoomResetBtn) {
+      itemsZoomResetBtn.textContent = `${normalized}%`;
+      itemsZoomResetBtn.disabled = normalized === 100;
+    }
+    if (itemsZoomOutBtn) {
+      itemsZoomOutBtn.disabled = normalized <= 80;
+    }
+    if (itemsZoomInBtn) {
+      itemsZoomInBtn.disabled = normalized >= 140;
+    }
+  }
+
+  function updateItemZoom(nextZoom) {
+    itemZoom = normalizeZoomValue(nextZoom);
+    saveItemZoom(accountId, slug, itemZoom);
+    applyItemZoom();
+  }
 
   function getSchemaFields() {
     const latestTemplate = parseTemplate(loadColumnTemplate(accountId, slug));
@@ -1194,6 +1256,25 @@ function saveSortPref(accountId, slug, sortState) {
     });
   }
 
+  if (itemsZoomOutBtn) {
+    itemsZoomOutBtn.addEventListener('click', () => {
+      updateItemZoom(itemZoom - 10);
+    });
+  }
+
+  if (itemsZoomResetBtn) {
+    itemsZoomResetBtn.addEventListener('click', () => {
+      updateItemZoom(100);
+    });
+  }
+
+  if (itemsZoomInBtn) {
+    itemsZoomInBtn.addEventListener('click', () => {
+      updateItemZoom(itemZoom + 10);
+    });
+  }
+
   await loadSectionMeta();
+  applyItemZoom();
   await loadItems();
 })();

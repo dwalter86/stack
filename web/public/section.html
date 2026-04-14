@@ -34,11 +34,15 @@
     </div>
 
     <section class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <div class="items-toolbar">
         <h2 style="margin:0;" id="itemsHeading">Items</h2>
-        <div style="flex-grow:1;display:flex;justify-content:flex-end;">
-          <input type="text" id="itemSearch" placeholder="Search items..." class="input"
-            style="width:100%;max-width:300px;margin-bottom:0;">
+        <div class="items-toolbar-controls">
+          <div class="zoom-controls" aria-label="Item list zoom controls">
+            <button type="button" class="btn" id="itemsZoomOutBtn" aria-label="Zoom out item list">🔍−</button>
+            <button type="button" class="btn" id="itemsZoomResetBtn" aria-label="Reset item list zoom">100%</button>
+            <button type="button" class="btn" id="itemsZoomInBtn" aria-label="Zoom in item list">🔍+</button>
+          </div>
+          <input type="text" id="itemSearch" placeholder="Search items..." class="input items-search-input">
         </div>
       </div>
       <div id="itemsEmptyState" class="empty-state hidden">
