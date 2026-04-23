@@ -65,6 +65,7 @@ function slugify(val) {
   const sectionMsg = document.getElementById('sectionMsg');
   const sectionSlugInput = document.getElementById('sectionSlug');
   const sectionLabelInput = document.getElementById('sectionLabel');
+  const sectionDetailInput = document.getElementById('sectionDetail');
   const sectionCancel = document.getElementById('sectionCancel');
 
   const sectionSearch = document.getElementById('sectionSearch');
@@ -175,7 +176,11 @@ function slugify(val) {
 
   function renderSections(term = '') {
     const filtered = term
-      ? allSections.filter(s => (s.label || '').toLowerCase().includes(term.toLowerCase()) || (s.slug || '').toLowerCase().includes(term.toLowerCase()))
+      ? allSections.filter(s =>
+        (s.label || '').toLowerCase().includes(term.toLowerCase())
+        || (s.slug || '').toLowerCase().includes(term.toLowerCase())
+        || (s.detail || '').toLowerCase().includes(term.toLowerCase())
+      )
       : allSections;
 
     if (!filtered.length) {
@@ -192,11 +197,13 @@ function slugify(val) {
     emptyStateEl.classList.add('hidden');
     sectionListEl.innerHTML = filtered.map(s => {
       const slugLine = showSlugs ? `<div class="small"><code>${escapeHtml(s.slug)}</code></div>` : '';
+      const detailText = (s.detail || '').trim();
+      const detailLine = detailText ? `<span class="small" style="margin-left:8px;">${escapeHtml(detailText)}</span>` : '';
       return `
         <div class="card" style="margin-bottom:8px;">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
             <div>
-              <strong>${escapeHtml(s.label)}</strong>
+              <strong>${escapeHtml(s.label)}</strong>${detailLine}
               ${slugLine}
             </div>
             <div>
@@ -232,6 +239,7 @@ function slugify(val) {
     sectionMsg.textContent = 'Saving…';
     const rawSlug = sectionSlugInput.value || generateSectionSlug();
     const label = sectionLabelInput.value.trim();
+    const detail = sectionDetailInput ? sectionDetailInput.value.trim() : '';
     const slug = rawSlug.trim() || generateSectionSlug();
 
     if (slug === 'default') {
@@ -242,7 +250,7 @@ function slugify(val) {
     try {
       await api(`/api/accounts/${accountId}/sections`, {
         method: 'POST',
-        body: JSON.stringify({ slug, label: label || slug, schema: {} })
+        body: JSON.stringify({ slug, label: label || slug, detail, schema: {} })
       });
       // Fire-and-forget webhook with new section details
       try {
@@ -257,6 +265,7 @@ function slugify(val) {
             section: {
               slug,
               label: label || slug,
+              detail,
               schema: {},
             },
             user: {

@@ -90,6 +90,29 @@
         <p id="itemMsg" class="small"></p>
       </div>
     </div>
+
+    <div id="editSectionModal" class="modal-backdrop hidden">
+      <div class="modal">
+        <h2>Edit section</h2>
+        <form id="editSectionForm">
+          <p>
+            <label>Section name
+              <input type="text" id="editSectionLabel" required>
+            </label>
+          </p>
+          <p>
+            <label>Detail
+              <input type="text" id="editSectionDetail" placeholder="Optional detail">
+            </label>
+          </p>
+          <div class="modal-actions">
+            <button type="button" class="btn" id="editSectionCancel">Cancel</button>
+            <button type="submit" class="btn primary">Save</button>
+          </div>
+        </form>
+        <p id="editSectionMsg" class="small"></p>
+      </div>
+    </div>
   </main>
   <script type="module" src="/js/auto-updater.js"></script>
   <script type="module" src="/js/section.js"></script>

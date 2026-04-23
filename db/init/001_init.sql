@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS sections (
   account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   slug TEXT NOT NULL,
   label TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
   schema JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (account_id, slug)

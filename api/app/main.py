@@ -281,40 +281,41 @@ async def delete_account(account_id: str, user_id: str = Depends(current_user)):
 async def list_sections(account_id: str, user_id: str = Depends(current_user)):
   with SessionLocal() as db:
     rows = db.execute(text("""
-      SELECT id::text, slug, label, COALESCE(schema, '{}'::jsonb)
+      SELECT id::text, slug, label, COALESCE(detail, ''), COALESCE(schema, '{}'::jsonb)
       FROM sections
       WHERE account_id = :a
       ORDER BY created_at
     """), {"a": account_id}).all()
-    return [SectionOut(id=r[0], slug=r[1], label=r[2], schema=normalize_section_schema(r[3])) for r in rows]
+    return [SectionOut(id=r[0], slug=r[1], label=r[2], detail=r[3], schema=normalize_section_schema(r[4])) for r in rows]
 
 @app.post("/api/accounts/{account_id}/sections", response_model=SectionOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def create_section(account_id: str, body: SectionCreate, user_id: str = Depends(current_user)):
   payload = json.dumps(normalize_section_schema(body.schema))
   with SessionLocal() as db:
     row = db.execute(text("""
-      INSERT INTO sections(account_id, slug, label, schema)
-      VALUES (:a, :slug, :label, CAST(:schema AS jsonb))
+      INSERT INTO sections(account_id, slug, label, detail, schema)
+      VALUES (:a, :slug, :label, :detail, CAST(:schema AS jsonb))
       ON CONFLICT (account_id, slug) DO UPDATE
         SET label = EXCLUDED.label,
+            detail = EXCLUDED.detail,
             schema = EXCLUDED.schema
-      RETURNING id::text, slug, label, COALESCE(schema, '{}'::jsonb)
-    """), {"a": account_id, "slug": body.slug, "label": body.label, "schema": payload}).first()
+      RETURNING id::text, slug, label, COALESCE(detail, ''), COALESCE(schema, '{}'::jsonb)
+    """), {"a": account_id, "slug": body.slug, "label": body.label, "detail": body.detail, "schema": payload}).first()
     db.commit()
-    return SectionOut(id=row[0], slug=row[1], label=row[2], schema=normalize_section_schema(row[3]))
+    return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], schema=normalize_section_schema(row[4]))
 
 @app.get("/api/accounts/{account_id}/sections/{slug}", response_model=SectionOut, dependencies=[Depends(ip_allowlist)])
 async def get_section(account_id: str, slug: str, user_id: str = Depends(current_user)):
   with SessionLocal() as db:
     row = db.execute(text("""
-      SELECT id::text, slug, label, COALESCE(schema, '{}'::jsonb)
+      SELECT id::text, slug, label, COALESCE(detail, ''), COALESCE(schema, '{}'::jsonb)
       FROM sections
       WHERE account_id = :a AND slug = :s
       LIMIT 1
     """), {"a": account_id, "s": slug}).first()
     if not row:
       raise HTTPException(status_code=404, detail="Section not found")
-    return SectionOut(id=row[0], slug=row[1], label=row[2], schema=normalize_section_schema(row[3]))
+    return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], schema=normalize_section_schema(row[4]))
 
 @app.put("/api/accounts/{account_id}/sections/{slug}", response_model=SectionOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def update_section(account_id: str, slug: str, body: SectionUpdate, user_id: str = Depends(current_user)):
@@ -323,14 +324,15 @@ async def update_section(account_id: str, slug: str, body: SectionUpdate, user_i
     row = db.execute(text("""
       UPDATE sections
       SET label = :label,
+          detail = COALESCE(:detail, detail),
           schema = CAST(:schema AS jsonb)
       WHERE account_id = :a AND slug = :s
-      RETURNING id::text, slug, label, COALESCE(schema, '{}'::jsonb)
-    """), {"a": account_id, "s": slug, "label": body.label, "schema": payload}).first()
+      RETURNING id::text, slug, label, COALESCE(detail, ''), COALESCE(schema, '{}'::jsonb)
+    """), {"a": account_id, "s": slug, "label": body.label, "detail": body.detail, "schema": payload}).first()
     if not row:
       raise HTTPException(status_code=404, detail="Section not found")
     db.commit()
-    return SectionOut(id=row[0], slug=row[1], label=row[2], schema=normalize_section_schema(row[3]))
+    return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], schema=normalize_section_schema(row[4]))
 
 @app.delete("/api/accounts/{account_id}/sections/{slug}", dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def delete_section(account_id: str, slug: str, user_id: str = Depends(current_user)):

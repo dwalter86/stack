@@ -338,6 +338,12 @@ function saveItemZoom(accountId, slug, zoomPercent) {
   const itemNameInput = document.getElementById('itemName');
   const itemMsg = document.getElementById('itemMsg');
   const itemCancel = document.getElementById('itemCancel');
+  const editSectionModal = document.getElementById('editSectionModal');
+  const editSectionForm = document.getElementById('editSectionForm');
+  const editSectionLabelInput = document.getElementById('editSectionLabel');
+  const editSectionDetailInput = document.getElementById('editSectionDetail');
+  const editSectionCancel = document.getElementById('editSectionCancel');
+  const editSectionMsg = document.getElementById('editSectionMsg');
   const schemaFieldsContainer = document.getElementById('schemaFieldsContainer');
   const kvEditorContainer = document.getElementById('kvEditorContainer');
   const kvRowsTbody = document.getElementById('kvRows');
@@ -464,6 +470,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     if (e.key === 'Escape') {
       closeMenu();
       closeItemModal();
+      closeEditSectionModal();
     }
   });
 
@@ -525,6 +532,22 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     itemMsg.textContent = '';
   }
 
+  function openEditSectionModal() {
+    const currentLabel = currentSection?.label || slug;
+    const currentDetail = (currentSection?.detail || '').trim();
+    editSectionMsg.textContent = '';
+    editSectionForm.reset();
+    editSectionLabelInput.value = currentLabel;
+    editSectionDetailInput.value = currentDetail;
+    editSectionModal.classList.remove('hidden');
+    setTimeout(() => editSectionLabelInput.focus(), 0);
+  }
+
+  function closeEditSectionModal() {
+    editSectionModal.classList.add('hidden');
+    editSectionMsg.textContent = '';
+  }
+
   function addKVRow(key = '', value = '') {
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -552,6 +575,47 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     itemCancel.addEventListener('click', (e) => {
       e.preventDefault();
       closeItemModal();
+    });
+  }
+
+  if (editSectionCancel) {
+    editSectionCancel.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeEditSectionModal();
+    });
+  }
+
+  if (editSectionForm) {
+    editSectionForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      editSectionMsg.textContent = 'Saving...';
+      const currentLabel = currentSection?.label || slug;
+      const currentDetail = (currentSection?.detail || '').trim();
+      const nextLabel = editSectionLabelInput.value.trim();
+      const nextDetail = editSectionDetailInput.value.trim();
+      if (!nextLabel) {
+        editSectionMsg.textContent = 'Section name is required.';
+        return;
+      }
+      if (nextLabel === currentLabel && nextDetail === currentDetail) {
+        closeEditSectionModal();
+        return;
+      }
+      try {
+        const updated = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            label: nextLabel,
+            detail: nextDetail,
+            schema: currentSection?.schema || {}
+          })
+        });
+        currentSection = updated;
+        titleEl.textContent = updated.label;
+        closeEditSectionModal();
+      } catch (err) {
+        editSectionMsg.textContent = err.message || 'Failed to update section';
+      }
     });
   }
 
@@ -1212,21 +1276,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     } else if (action === 'settings') {
       window.location.href = `/item-columns.html?account=${encodeURIComponent(accountId)}&slug=${encodeURIComponent(slug)}`;
     } else if (action === 'edit') {
-      const currentLabel = currentSection?.label || slug;
-      const next = prompt('Section name', currentLabel);
-      if (!next) return;
-      const trimmed = next.trim();
-      if (!trimmed || trimmed === currentLabel) return;
-      try {
-        const updated = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`, {
-          method: 'PUT',
-          body: JSON.stringify({ label: trimmed, schema: currentSection?.schema || {} })
-        });
-        currentSection = updated;
-        titleEl.textContent = updated.label;
-      } catch (err) {
-        alert(err.message || 'Failed to update section');
-      }
+      openEditSectionModal();
     } else if (action === 'delete') {
       if (!confirm('Delete this section and all its items? This cannot be undone.')) {
         return;
