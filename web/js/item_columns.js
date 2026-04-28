@@ -256,8 +256,8 @@ function reconcileVisibility(columns, stored) {
   renderShell(me);
   const labels = getLabels(me);
 
-  const accountId = qs('account');
-  const slug = qs('slug');
+  const accountId = qs('account') || qs('account_id') || qs('id');
+  const slug = qs('slug') || qs('section_slug') || qs('section');
   if (!accountId || !slug) {
     document.body.innerHTML = '<main class="container"><p>Missing account or section.</p></main>';
     return;
