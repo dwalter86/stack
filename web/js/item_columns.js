@@ -61,6 +61,55 @@ function saveTemplate(accountId, slug, tpl) {
   localStorage.setItem(templatePrefKey(accountId, slug), JSON.stringify(tpl));
 }
 
+function parseCsvValues(raw) {
+  if (!raw || typeof raw !== 'string') return [];
+  const seen = new Set();
+  const values = [];
+  raw.split(',').forEach((chunk) => {
+    const val = chunk.trim();
+    if (!val) return;
+    const key = val.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    values.push(val);
+  });
+  return values;
+}
+
+function csvFromValues(values) {
+  if (!Array.isArray(values) || !values.length) return '';
+  return values.map(v => String(v)).join(', ');
+}
+
+function parseStatusSummary(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      enabled: false,
+      fieldKey: '',
+      redValues: [],
+      yellowValues: [],
+      greenValues: [],
+      redLabel: '',
+      yellowLabel: '',
+      greenLabel: '',
+    };
+  }
+  const fieldKey = String(raw.field_key || '').trim();
+  const redValues = Array.isArray(raw.red_values) ? raw.red_values.map(v => String(v).trim()).filter(Boolean) : [];
+  const yellowValues = Array.isArray(raw.yellow_values) ? raw.yellow_values.map(v => String(v).trim()).filter(Boolean) : [];
+  const greenValues = Array.isArray(raw.green_values) ? raw.green_values.map(v => String(v).trim()).filter(Boolean) : [];
+  return {
+    enabled: Boolean(raw.enabled && fieldKey),
+    fieldKey,
+    redValues,
+    yellowValues,
+    greenValues,
+    redLabel: String(raw.red_label || '').trim(),
+    yellowLabel: String(raw.yellow_label || '').trim(),
+    greenLabel: String(raw.green_label || '').trim(),
+  };
+}
+
 const SAMPLE_TEMPLATE = {
   name: 'template',
   fields: [
@@ -227,6 +276,16 @@ function reconcileVisibility(columns, stored) {
   const templateExample = document.getElementById('templateExample');
   const templateMessage = document.getElementById('templateMessage');
   const saveTemplateBtn = document.getElementById('saveTemplateBtn');
+  const statusSummaryForm = document.getElementById('statusSummaryForm');
+  const statusSummaryFieldKey = document.getElementById('statusSummaryFieldKey');
+  const statusSummaryRedValues = document.getElementById('statusSummaryRedValues');
+  const statusSummaryYellowValues = document.getElementById('statusSummaryYellowValues');
+  const statusSummaryGreenValues = document.getElementById('statusSummaryGreenValues');
+  const statusSummaryRedLabel = document.getElementById('statusSummaryRedLabel');
+  const statusSummaryYellowLabel = document.getElementById('statusSummaryYellowLabel');
+  const statusSummaryGreenLabel = document.getElementById('statusSummaryGreenLabel');
+  const statusSummaryMessage = document.getElementById('statusSummaryMessage');
+  const isReadOnly = me.user_type === 'standard';
 
   function initCardToggles() {
     const cards = document.querySelectorAll('.collapsible-card');
@@ -259,12 +318,14 @@ function reconcileVisibility(columns, stored) {
   }
 
   let sectionLabel = slug;
+  let currentSection = null;
   const storedTemplate = loadTemplate(accountId, slug);
   const parsedTemplate = parseTemplate(storedTemplate);
   let schemaFields = parsedTemplate.fields || [];
   let apiTemplate = null;
   try {
     const section = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`);
+    currentSection = section;
     const schema = section.schema || {};
     const apiFields = parseTemplate(schema).fields || [];
     if (!schemaFields.length) {
@@ -277,6 +338,29 @@ function reconcileVisibility(columns, stored) {
       schemaFields = [];
     }
     sectionLabel = slug;
+  }
+
+  const initialStatusSummary = parseStatusSummary(currentSection?.schema?.status_summary || {});
+  if (statusSummaryFieldKey) {
+    statusSummaryFieldKey.value = initialStatusSummary.fieldKey;
+  }
+  if (statusSummaryRedValues) {
+    statusSummaryRedValues.value = csvFromValues(initialStatusSummary.redValues);
+  }
+  if (statusSummaryYellowValues) {
+    statusSummaryYellowValues.value = csvFromValues(initialStatusSummary.yellowValues);
+  }
+  if (statusSummaryGreenValues) {
+    statusSummaryGreenValues.value = csvFromValues(initialStatusSummary.greenValues);
+  }
+  if (statusSummaryRedLabel) {
+    statusSummaryRedLabel.value = initialStatusSummary.redLabel;
+  }
+  if (statusSummaryYellowLabel) {
+    statusSummaryYellowLabel.value = initialStatusSummary.yellowLabel;
+  }
+  if (statusSummaryGreenLabel) {
+    statusSummaryGreenLabel.value = initialStatusSummary.greenLabel;
   }
 
   title.textContent = `${labels.items_label} columns`;
@@ -389,4 +473,81 @@ function reconcileVisibility(columns, stored) {
       templateMessage.textContent = `Could not parse JSON: ${err.message}`;
     }
   });
+
+  async function updateSectionSchema(patch) {
+    if (!currentSection) {
+      throw new Error('Section not loaded.');
+    }
+    const nextSchema = {
+      ...(currentSection.schema || {}),
+      ...patch,
+    };
+    const updated = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        label: currentSection.label || slug,
+        detail: currentSection.detail || '',
+        schema: nextSchema,
+      }),
+    });
+    currentSection = updated;
+    return updated;
+  }
+
+  if (statusSummaryForm) {
+    if (isReadOnly) {
+      statusSummaryForm.querySelectorAll('input, button').forEach((el) => {
+        el.disabled = true;
+      });
+      if (statusSummaryMessage) {
+        statusSummaryMessage.textContent = 'You have read-only access and cannot change status summary settings.';
+      }
+    }
+
+    statusSummaryForm.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      if (statusSummaryMessage) statusSummaryMessage.textContent = '';
+      if (isReadOnly) return;
+
+      const fieldKey = statusSummaryFieldKey ? statusSummaryFieldKey.value.trim() : '';
+      const redValues = parseCsvValues(statusSummaryRedValues ? statusSummaryRedValues.value : '');
+      const yellowValues = parseCsvValues(statusSummaryYellowValues ? statusSummaryYellowValues.value : '');
+      const greenValues = parseCsvValues(statusSummaryGreenValues ? statusSummaryGreenValues.value : '');
+      const hasAnyValues = redValues.length || yellowValues.length || greenValues.length;
+      const redLabel = statusSummaryRedLabel ? statusSummaryRedLabel.value.trim() : '';
+      const yellowLabel = statusSummaryYellowLabel ? statusSummaryYellowLabel.value.trim() : '';
+      const greenLabel = statusSummaryGreenLabel ? statusSummaryGreenLabel.value.trim() : '';
+
+      if (hasAnyValues && !fieldKey) {
+        if (statusSummaryMessage) {
+          statusSummaryMessage.textContent = 'Enter a status field key when color values are configured.';
+        }
+        return;
+      }
+
+      const payload = {
+        enabled: Boolean(fieldKey && hasAnyValues),
+        field_key: fieldKey,
+        red_values: redValues,
+        yellow_values: yellowValues,
+        green_values: greenValues,
+        red_label: redLabel,
+        yellow_label: yellowLabel,
+        green_label: greenLabel,
+      };
+
+      try {
+        await updateSectionSchema({ status_summary: payload });
+        if (statusSummaryMessage) {
+          statusSummaryMessage.textContent = payload.enabled
+            ? 'Status summary saved.'
+            : 'Status summary saved (currently disabled until values are set).';
+        }
+      } catch (err) {
+        if (statusSummaryMessage) {
+          statusSummaryMessage.textContent = err.message || 'Failed to save status summary settings.';
+        }
+      }
+    });
+  }
 })();

@@ -28,6 +28,61 @@ function slugify(val) {
   return s || 'section';
 }
 
+function parseStatusSummaryConfig(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const fieldKey = String(raw.field_key || '').trim();
+  if (!raw.enabled || !fieldKey) return null;
+
+  const normalizeValues = (arr) => {
+    if (!Array.isArray(arr)) return new Set();
+    return new Set(
+      arr
+        .map(v => String(v).trim().toLowerCase())
+        .filter(Boolean)
+    );
+  };
+
+  const red = normalizeValues(raw.red_values);
+  const yellow = normalizeValues(raw.yellow_values);
+  const green = normalizeValues(raw.green_values);
+  if (!red.size && !yellow.size && !green.size) return null;
+
+  return {
+    fieldKey,
+    red,
+    yellow,
+    green,
+    redLabel: String(raw.red_label || '').trim(),
+    yellowLabel: String(raw.yellow_label || '').trim(),
+    greenLabel: String(raw.green_label || '').trim(),
+  };
+}
+
+function normalizeStatusValue(val) {
+  return String(val ?? '').trim().toLowerCase();
+}
+
+function computeStatusCounts(items, config) {
+  const counts = { red: 0, yellow: 0, green: 0 };
+  for (const item of items || []) {
+    const value = normalizeStatusValue(item?.data?.[config.fieldKey]);
+    if (!value) continue;
+    if (config.red.has(value)) {
+      counts.red += 1;
+    } else if (config.yellow.has(value)) {
+      counts.yellow += 1;
+    } else if (config.green.has(value)) {
+      counts.green += 1;
+    }
+  }
+  return counts;
+}
+
+function renderStatusText(label, count) {
+  const safeCount = Number.isFinite(count) ? count : 0;
+  return label ? `${escapeHtml(label)} ${safeCount}` : `${safeCount}`;
+}
+
 (async () => {
   const me = await loadMeOrRedirect(); if (!me) return;
   renderShell(me);
@@ -199,6 +254,7 @@ function slugify(val) {
       const slugLine = showSlugs ? `<div class="small"><code>${escapeHtml(s.slug)}</code></div>` : '';
       const detailText = (s.detail || '').trim();
       const detailLine = detailText ? `<span class="small" style="margin-left:8px;">${escapeHtml(detailText)}</span>` : '';
+      const statusSummaryContainerId = `sectionStatusSummary-${encodeURIComponent(s.slug)}`;
       return `
         <div class="card" style="margin-bottom:8px;">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
@@ -206,13 +262,37 @@ function slugify(val) {
               <strong>${escapeHtml(s.label)}</strong>${detailLine}
               ${slugLine}
             </div>
-            <div>
+            <div class="section-actions">
+              <div id="${statusSummaryContainerId}" class="section-status-summary hidden" aria-live="polite"></div>
               <a class="btn" href="/section.html?account=${encodeURIComponent(accountId)}&slug=${encodeURIComponent(s.slug)}">Open</a>
             </div>
           </div>
         </div>
       `;
     }).join('');
+
+    renderStatusSummariesFor(filtered);
+  }
+
+  async function renderStatusSummariesFor(sections) {
+    await Promise.all(sections.map(async (section) => {
+      const config = parseStatusSummaryConfig(section?.schema?.status_summary);
+      const summaryEl = document.getElementById(`sectionStatusSummary-${encodeURIComponent(section.slug)}`);
+      if (!summaryEl || !config) return;
+
+      try {
+        const page = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(section.slug)}/items?limit=200`);
+        const counts = computeStatusCounts(page?.items || [], config);
+        summaryEl.innerHTML = `
+          <span class="status-pill status-pill-red">${renderStatusText(config.redLabel, counts.red)}</span>
+          <span class="status-pill status-pill-yellow">${renderStatusText(config.yellowLabel, counts.yellow)}</span>
+          <span class="status-pill status-pill-green">${renderStatusText(config.greenLabel, counts.green)}</span>
+        `;
+        summaryEl.classList.remove('hidden');
+      } catch {
+        summaryEl.classList.add('hidden');
+      }
+    }));
   }
 
   if (sectionSearch) {

@@ -82,6 +82,52 @@
       </div>
     </section>
 
+    <section class="card collapsible-card is-collapsed">
+      <div class="card-header-row">
+        <h2>Status summary</h2>
+        <button class="btn small secondary card-toggle" type="button" aria-expanded="false">
+          Show
+        </button>
+      </div>
+      <div class="card-body" hidden>
+        <p class="small">Configure a status field and exact values to display red/yellow/green counts on the account sections list.</p>
+        <form id="statusSummaryForm" class="stacked-list" style="margin-top:12px;">
+          <label for="statusSummaryFieldKey">
+            Status field key
+            <input id="statusSummaryFieldKey" type="text" placeholder="status">
+          </label>
+          <label for="statusSummaryRedValues">
+            Red values (comma-separated)
+            <input id="statusSummaryRedValues" type="text" placeholder="blocked, urgent">
+          </label>
+          <label for="statusSummaryYellowValues">
+            Yellow values (comma-separated)
+            <input id="statusSummaryYellowValues" type="text" placeholder="in progress, waiting">
+          </label>
+          <label for="statusSummaryGreenValues">
+            Green values (comma-separated)
+            <input id="statusSummaryGreenValues" type="text" placeholder="done, complete">
+          </label>
+          <label for="statusSummaryRedLabel">
+            Red label (optional)
+            <input id="statusSummaryRedLabel" type="text" placeholder="Leave empty to show count only">
+          </label>
+          <label for="statusSummaryYellowLabel">
+            Yellow label (optional)
+            <input id="statusSummaryYellowLabel" type="text" placeholder="Leave empty to show count only">
+          </label>
+          <label for="statusSummaryGreenLabel">
+            Green label (optional)
+            <input id="statusSummaryGreenLabel" type="text" placeholder="Leave empty to show count only">
+          </label>
+          <div class="actions" style="justify-content:flex-start;">
+            <button class="btn" type="submit">Save</button>
+          </div>
+          <p class="small" id="statusSummaryMessage"></p>
+        </form>
+      </div>
+    </section>
+
   </main>
   <script type="module" src="/js/auto-updater.js"></script>
   <script type="module" src="/js/item_columns.js"></script>

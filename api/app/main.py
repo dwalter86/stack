@@ -73,8 +73,57 @@ def normalize_section_schema(raw: dict | None) -> dict:
   Normalize both inputs so the stored schema always has a `fields` list
   compatible with the UI expectations.
   """
+  def normalize_status_summary(val: object) -> dict:
+    if not isinstance(val, dict):
+      return {
+        "enabled": False,
+        "field_key": "",
+        "red_values": [],
+        "yellow_values": [],
+        "green_values": [],
+        "red_label": "",
+        "yellow_label": "",
+        "green_label": "",
+      }
+    field_key = str(val.get("field_key") or "").strip()
+
+    def clean_values(key: str) -> list[str]:
+      raw_values = val.get(key)
+      if not isinstance(raw_values, list):
+        return []
+      cleaned: list[str] = []
+      seen: set[str] = set()
+      for item in raw_values:
+        text = str(item).strip()
+        if not text:
+          continue
+        dedupe_key = text.lower()
+        if dedupe_key in seen:
+          continue
+        seen.add(dedupe_key)
+        cleaned.append(text)
+      return cleaned
+
+    red_values = clean_values("red_values")
+    yellow_values = clean_values("yellow_values")
+    green_values = clean_values("green_values")
+    enabled = bool(val.get("enabled")) and bool(field_key) and bool(red_values or yellow_values or green_values)
+    return {
+      "enabled": enabled,
+      "field_key": field_key,
+      "red_values": red_values,
+      "yellow_values": yellow_values,
+      "green_values": green_values,
+      "red_label": str(val.get("red_label") or "").strip(),
+      "yellow_label": str(val.get("yellow_label") or "").strip(),
+      "green_label": str(val.get("green_label") or "").strip(),
+    }
+
   if not isinstance(raw, dict):
-    return {"fields": []}
+    return {
+      "fields": [],
+      "status_summary": normalize_status_summary(None),
+    }
 
   raw_fields = raw.get("fields")
   if isinstance(raw_fields, list):
@@ -82,7 +131,10 @@ def normalize_section_schema(raw: dict | None) -> dict:
     for field in raw_fields:
       if isinstance(field, dict) and field.get("key"):
         normalized.append(field)
-    return {"fields": normalized}
+    return {
+      "fields": normalized,
+      "status_summary": normalize_status_summary(raw.get("status_summary")),
+    }
 
   normalized_fields = []
   for key, val in raw.items():
@@ -100,7 +152,10 @@ def normalize_section_schema(raw: dict | None) -> dict:
       field["order"] = val["order"]
     normalized_fields.append(field)
 
-  return {"fields": normalized_fields}
+  return {
+    "fields": normalized_fields,
+    "status_summary": normalize_status_summary(raw.get("status_summary")),
+  }
 
 
 WEBHOOK_ITEM_UPDATED = "https://n8n.adigi8.app/webhook/af693448-f43f-493c-97af-c46064dba8ba"
