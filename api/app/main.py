@@ -24,6 +24,8 @@ from schemas import (
     PreferencesUpdate,
     CommentCreate,
     CommentOut,
+    SectionNoteCreate,
+    SectionNoteOut,
     ItemUpdate,
 )
 from auth import login_and_get_user, create_token, memberships_for_user
@@ -297,6 +299,22 @@ async def create_account(body: AccountCreate, user_id: str = Depends(current_use
           EXECUTE format('CREATE POLICY comments_tenant_policy ON %I.comments USING (true)', sch);
         END IF;
 
+        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.section_notes (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          section_slug TEXT NOT NULL,
+          user_id UUID,
+          user_name TEXT,
+          note TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )', sch);
+        EXECUTE format('ALTER TABLE %I.section_notes ENABLE ROW LEVEL SECURITY', sch);
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = sch AND tablename = 'section_notes' AND policyname = 'section_notes_tenant_policy'
+        ) THEN
+          EXECUTE format('CREATE POLICY section_notes_tenant_policy ON %I.section_notes USING (true)', sch);
+        END IF;
+
       END $$;
     """
     db.execute(text(schema_sql))
@@ -500,6 +518,33 @@ async def create_item_comment(account_id: str, item_id: str, body: CommentCreate
   if not comment:
     raise HTTPException(status_code=400, detail="Comment cannot be empty")
   return rls.create_comment(account_id, item_id, user_id, user_name, comment)
+
+# --- Section notes API ---
+
+@app.get("/api/accounts/{account_id}/sections/{slug}/notes", response_model=list[SectionNoteOut], dependencies=[Depends(ip_allowlist)])
+async def list_section_notes(account_id: str, slug: str, user_id: str = Depends(current_user)):
+  rls.ensure_section_notes_table(account_id)
+  return rls.list_section_notes(account_id, slug)
+
+@app.post("/api/accounts/{account_id}/sections/{slug}/notes", response_model=SectionNoteOut, status_code=201, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
+async def create_section_note(account_id: str, slug: str, body: SectionNoteCreate, user_id: str = Depends(current_user)):
+  with SessionLocal() as db:
+    user_row = db.execute(text("SELECT COALESCE(name, email) FROM users WHERE id = :u"), {"u": user_id}).first()
+    if not user_row:
+      raise HTTPException(status_code=403, detail="User not found")
+    default_user_name = user_row[0]
+
+  user_name = None
+  if body.user_name is not None:
+    user_name = body.user_name.strip()
+  if not user_name:
+    user_name = default_user_name
+
+  note = body.note.strip()
+  if not note:
+    raise HTTPException(status_code=400, detail="Note cannot be empty")
+  rls.ensure_section_notes_table(account_id)
+  return rls.create_section_note(account_id, slug, user_id, user_name, note)
 
 # --- Admin API ---
 

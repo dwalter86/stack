@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Section Notes</title>
+    <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+    <header id="site-header"></header>
+    <main class="page-container">
+        <div class="account-header">
+            <div class="account-header-main">
+                <a class="btnBack" href="#" id="back-link">Back</a>
+                <div>
+                    <h1 id="page-title">Notes</h1>
+                    <p class="small" id="section-meta"></p>
+                </div>
+            </div>
+        </div>
+
+        <section class="comments-feed" id="notes-list-container">
+            <div id="notes-list" class="comment-cards"></div>
+        </section>
+
+        <section class="card">
+            <h2>Add a Note</h2>
+            <form id="note-form">
+                <textarea id="note-text" name="note" rows="4" placeholder="Write your note here..." required></textarea>
+                <button type="submit" class="btn primary">Save Note</button>
+            </form>
+        </section>
+    </main>
+    <script type="module" src="/js/auto-updater.js"></script>
+    <script src="/js/notes.js" type="module"></script>
+</body>
+</html>

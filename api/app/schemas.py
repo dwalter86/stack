@@ -107,3 +107,14 @@ class CommentOut(BaseModel):
     user_name: Optional[str] = None
     comment: str
     created_at: datetime
+
+class SectionNoteCreate(BaseModel):
+    note: str
+    user_name: Optional[str] = None
+
+class SectionNoteOut(BaseModel):
+    id: str
+    section_slug: str
+    user_name: Optional[str] = None
+    note: str
+    created_at: datetime

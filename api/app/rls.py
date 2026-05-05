@@ -127,6 +127,50 @@ def create_comment(account_id: str, item_id: str, user_id: str, user_name: str, 
     db.commit()
     return dict(row._mapping)
 
+def ensure_section_notes_table(account_id: str):
+  schema = _schema_name(account_id)
+  sql = f"""
+  CREATE TABLE IF NOT EXISTS {schema}.section_notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    section_slug TEXT NOT NULL,
+    user_id UUID,
+    user_name TEXT,
+    note TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )
+  """
+  with SessionLocal() as db:
+    db.execute(set_current_account(account_id))
+    db.execute(text(sql))
+    db.commit()
+
+def list_section_notes(account_id: str, section_slug: str):
+  schema = _schema_name(account_id)
+  sql = f"""
+  SELECT id::text, section_slug, user_name, note, created_at
+  FROM {schema}.section_notes
+  WHERE section_slug = :section_slug
+  ORDER BY created_at ASC
+  """
+  with SessionLocal() as db:
+    db.execute(set_current_account(account_id))
+    rows = db.execute(text(sql), {"section_slug": section_slug}).all()
+    return [dict(r._mapping) for r in rows]
+
+def create_section_note(account_id: str, section_slug: str, user_id: str, user_name: str, note: str):
+  schema = _schema_name(account_id)
+  sql = f"""
+  INSERT INTO {schema}.section_notes (section_slug, user_id, user_name, note)
+  VALUES (:section_slug, :user_id, :user_name, :note)
+  RETURNING id::text, section_slug, user_name, note, created_at
+  """
+  with SessionLocal() as db:
+    db.execute(set_current_account(account_id))
+    params = {"section_slug": section_slug, "user_id": user_id, "user_name": user_name, "note": note}
+    row = db.execute(text(sql), params).first()
+    db.commit()
+    return dict(row._mapping)
+
 def get_item(account_id: str, item_id: str):
   schema = _schema_name(account_id)
   sql = f"""

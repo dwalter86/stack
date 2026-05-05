@@ -320,6 +320,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
   const itemsEmptyCopy = document.getElementById('itemsEmptyCopy');
   const itemModalTitle = document.getElementById('itemModalTitle');
   const exportBtn = document.getElementById('exportItemsBtn');
+  const notesBtn = document.getElementById('notesBtn');
   const addItemBtn = document.getElementById('addItemBtn');
 
   const menuButton = document.getElementById('sectionMenuButton');
@@ -361,6 +362,9 @@ function saveItemZoom(accountId, slug, zoomPercent) {
 
   if (backLink) {
     backLink.href = `/account.html?id=${encodeURIComponent(accountId)}`;
+  }
+  if (notesBtn) {
+    notesBtn.href = `/notes.html?account_id=${encodeURIComponent(accountId)}&section_slug=${encodeURIComponent(slug)}`;
   }
 
   let accountName = `Account ${accountId}`;
