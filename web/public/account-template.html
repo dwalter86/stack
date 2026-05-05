@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Export Template</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+
+<body>
+  <header id="site-header"></header>
+  <main class="page-container">
+    <div class="account-header">
+      <div class="account-header-main">
+        <a class="btnBack" href="#" id="backToAccount">Back</a>
+        <div>
+          <h1>Export template settings</h1>
+          <p class="small" id="templateAccountMeta"></p>
+        </div>
+      </div>
+    </div>
+
+    <section id="templateCard" class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0 0 4px 0;">Template</h2>
+          <p class="small" style="margin:0;">One .docx template is used for PDF and Word exports across this account's sections.</p>
+        </div>
+        <div class="account-header-actions" style="gap:8px;">
+          <a href="#" id="templateStarterBtn" class="btn">Download starter</a>
+          <button type="button" id="templateUploadBtn" class="btn primary">Upload template</button>
+          <button type="button" id="templateReplaceBtn" class="btn hidden">Replace</button>
+          <button type="button" id="templateDeleteBtn" class="btn danger hidden">Remove</button>
+        </div>
+      </div>
+      <div id="templateStatus" class="small" style="margin-top:12px;">Loading…</div>
+      <input type="file" id="templateFileInput" accept=".docx" class="hidden">
+    </section>
+  </main>
+
+  <script type="module" src="/js/auto-updater.js"></script>
+  <script type="module" src="/js/account-template.js"></script>
+</body>
+
+</html>

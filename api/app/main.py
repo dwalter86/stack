@@ -1,6 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException, Query, Request
+from fastapi import FastAPI, Depends, HTTPException, Query, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from typing import Optional
+from datetime import datetime, timezone
 import json
 import urllib.request
 import urllib.error
@@ -27,10 +29,13 @@ from schemas import (
     SectionNoteCreate,
     SectionNoteOut,
     ItemUpdate,
+    TemplateInfo,
+    ExportRequest,
 )
 from auth import login_and_get_user, create_token, memberships_for_user
 from deps import current_user, ip_allowlist, require_admin, require_editor
 import rls
+import exports
 from sqlalchemy import text
 from database import SessionLocal
 
@@ -545,6 +550,183 @@ async def create_section_note(account_id: str, slug: str, body: SectionNoteCreat
     raise HTTPException(status_code=400, detail="Note cannot be empty")
   rls.ensure_section_notes_table(account_id)
   return rls.create_section_note(account_id, slug, user_id, user_name, note)
+
+# --- Account export template ---
+
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+def _fetch_template_row(account_id: str):
+  with SessionLocal() as db:
+    row = db.execute(text("""
+      SELECT filename, content, updated_at,
+             COALESCE((SELECT name FROM users WHERE id = uploaded_by), '')
+      FROM account_template
+      WHERE account_id = :a
+      LIMIT 1
+    """), {"a": account_id}).first()
+  return row
+
+@app.get("/api/accounts/{account_id}/template", response_model=TemplateInfo, dependencies=[Depends(ip_allowlist)])
+async def get_account_template_info(account_id: str, user_id: str = Depends(current_user)):
+  row = _fetch_template_row(account_id)
+  if not row:
+    raise HTTPException(status_code=404, detail="No template uploaded")
+  return TemplateInfo(filename=row[0], updated_at=row[2], uploaded_by=row[3] or None)
+
+@app.get("/api/accounts/{account_id}/template/file", dependencies=[Depends(ip_allowlist)])
+async def download_account_template(account_id: str, user_id: str = Depends(current_user)):
+  row = _fetch_template_row(account_id)
+  if not row:
+    raise HTTPException(status_code=404, detail="No template uploaded")
+  filename, content, _, _ = row
+  return Response(
+    content=bytes(content),
+    media_type=DOCX_MIME,
+    headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+  )
+
+@app.get("/api/accounts/{account_id}/template/starter", dependencies=[Depends(ip_allowlist)])
+async def download_starter_template(account_id: str, user_id: str = Depends(current_user)):
+  with SessionLocal() as db:
+    acc = db.execute(text("SELECT name FROM accounts WHERE id = :a"), {"a": account_id}).first()
+    if not acc:
+      raise HTTPException(status_code=404, detail="Account not found")
+    section_rows = db.execute(text("""
+      SELECT slug, label, COALESCE(schema, '{}'::jsonb)
+      FROM sections
+      WHERE account_id = :a
+      ORDER BY created_at
+    """), {"a": account_id}).all()
+  sections = [
+    {"slug": r[0], "label": r[1], "schema": normalize_section_schema(r[2])}
+    for r in section_rows
+  ]
+  data = exports.generate_starter_template(account_name=acc[0], sections=sections)
+  filename = "starter_template.docx"
+  return Response(
+    content=data,
+    media_type=DOCX_MIME,
+    headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+  )
+
+@app.put("/api/accounts/{account_id}/template", response_model=TemplateInfo, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
+async def upload_account_template(
+  account_id: str,
+  file: UploadFile = File(...),
+  user_id: str = Depends(current_user),
+):
+  raw = await file.read()
+  try:
+    exports.validate_docx_bytes(raw)
+  except ValueError as exc:
+    raise HTTPException(status_code=400, detail=str(exc))
+
+  filename = file.filename or "template.docx"
+  with SessionLocal() as db:
+    acc = db.execute(text("SELECT 1 FROM accounts WHERE id = :a"), {"a": account_id}).first()
+    if not acc:
+      raise HTTPException(status_code=404, detail="Account not found")
+    row = db.execute(text("""
+      INSERT INTO account_template(account_id, filename, content, uploaded_by, updated_at)
+      VALUES (:a, :f, :c, :u, now())
+      ON CONFLICT (account_id) DO UPDATE
+        SET filename = EXCLUDED.filename,
+            content = EXCLUDED.content,
+            uploaded_by = EXCLUDED.uploaded_by,
+            updated_at = now()
+      RETURNING filename, updated_at,
+                COALESCE((SELECT name FROM users WHERE id = uploaded_by), '')
+    """), {"a": account_id, "f": filename, "c": raw, "u": user_id}).first()
+    db.commit()
+  return TemplateInfo(filename=row[0], updated_at=row[1], uploaded_by=row[2] or None)
+
+@app.delete("/api/accounts/{account_id}/template", status_code=204, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
+async def delete_account_template(account_id: str, user_id: str = Depends(current_user)):
+  with SessionLocal() as db:
+    res = db.execute(text("DELETE FROM account_template WHERE account_id = :a"), {"a": account_id})
+    db.commit()
+    if res.rowcount == 0:
+      raise HTTPException(status_code=404, detail="No template uploaded")
+  return None
+
+# --- Section export ---
+
+@app.post("/api/accounts/{account_id}/sections/{slug}/export", dependencies=[Depends(ip_allowlist), Depends(require_editor)])
+async def export_section(
+  account_id: str,
+  slug: str,
+  body: ExportRequest,
+  user_id: str = Depends(current_user),
+):
+  with SessionLocal() as db:
+    acc = db.execute(text("SELECT id::text, name FROM accounts WHERE id = :a"), {"a": account_id}).first()
+    if not acc:
+      raise HTTPException(status_code=404, detail="Account not found")
+    section_row = db.execute(text("""
+      SELECT slug, label, COALESCE(detail, ''), COALESCE(schema, '{}'::jsonb)
+      FROM sections
+      WHERE account_id = :a AND slug = :s
+      LIMIT 1
+    """), {"a": account_id, "s": slug}).first()
+    if not section_row:
+      raise HTTPException(status_code=404, detail="Section not found")
+    template_row = db.execute(text("""
+      SELECT filename, content
+      FROM account_template
+      WHERE account_id = :a
+      LIMIT 1
+    """), {"a": account_id}).first()
+    if not template_row:
+      raise HTTPException(status_code=409, detail="No template uploaded for this account")
+    user_row = db.execute(text("SELECT COALESCE(NULLIF(name, ''), email) FROM users WHERE id = :u"), {"u": user_id}).first()
+    exported_by = user_row[0] if user_row else ""
+
+  account = {"id": acc[0], "name": acc[1]}
+  section = {"slug": section_row[0], "label": section_row[1], "detail": section_row[2]}
+
+  ids = body.item_ids
+  items: list[dict]
+  if ids:
+    if len(ids) > exports.MAX_ITEMS_PER_EXPORT:
+      raise HTTPException(status_code=400, detail=f"Too many items (max {exports.MAX_ITEMS_PER_EXPORT})")
+    items = []
+    for item_id in ids:
+      it = rls.get_item(account_id, item_id)
+      if it and it.get("section_slug") == slug:
+        items.append(it)
+  else:
+    items = rls.list_items(account_id, section=slug, limit=exports.MAX_ITEMS_PER_EXPORT)
+
+  if not items:
+    raise HTTPException(status_code=400, detail="No items to export")
+
+  context = exports.build_context(items=items, section=section, account=account, exported_by=exported_by)
+
+  try:
+    docx_bytes = exports.render_template(template_row[1], context)
+  except exports.TemplateRenderError as exc:
+    raise HTTPException(status_code=400, detail=str(exc))
+
+  safe_section = "".join(c if c.isalnum() else "_" for c in (section["label"] or slug)).strip("_") or "section"
+  base_name = f"{safe_section}_{datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
+
+  if body.format == "docx":
+    return Response(
+      content=docx_bytes,
+      media_type=DOCX_MIME,
+      headers={"Content-Disposition": f'attachment; filename="{base_name}.docx"'},
+    )
+
+  try:
+    pdf_bytes = exports.docx_to_pdf(docx_bytes, filename=f"{base_name}.docx")
+  except exports.PdfConversionError as exc:
+    raise HTTPException(status_code=503, detail=str(exc))
+
+  return Response(
+    content=pdf_bytes,
+    media_type="application/pdf",
+    headers={"Content-Disposition": f'attachment; filename="{base_name}.pdf"'},
+  )
 
 # --- Admin API ---
 

@@ -1,4 +1,4 @@
-import { loadMeOrRedirect, renderShell, api, getLabels, escapeHtml } from './common.js';
+import { loadMeOrRedirect, renderShell, api, getLabels, escapeHtml, getToken } from './common.js';
 
 function qs(name) {
   const m = new URLSearchParams(location.search).get(name);
@@ -251,8 +251,61 @@ function formatDateTime(val) {
   const editBtn = document.getElementById('editItemBtn');
   const cancelBtn = document.getElementById('cancelEditBtn');
   const saveBtn = document.getElementById('saveEditBtn');
+  const exportItemBtn = document.getElementById('exportItemBtn');
 
   const isReadOnly = me.user_type === 'standard';
+
+  async function exportItemAsPdf() {
+    if (!exportItemBtn || isReadOnly) return;
+    const originalLabel = exportItemBtn.textContent;
+    exportItemBtn.disabled = true;
+    exportItemBtn.textContent = 'Building PDF…';
+    try {
+      const token = getToken();
+      const res = await fetch(`/api/accounts/${accountId}/sections/${encodeURIComponent(sectionSlug)}/export`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: 'Bearer ' + token } : {}),
+        },
+        body: JSON.stringify({ item_ids: [itemId], format: 'pdf' }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText);
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const safeName = (currentItem?.name || 'item').replace(/[^a-z0-9]+/gi, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'item';
+      const dateStamp = new Date().toISOString().split('T')[0];
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${safeName}_${dateStamp}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        link.remove();
+      }, 0);
+    } catch (err) {
+      alert(`Export failed: ${err.message || err}`);
+    } finally {
+      exportItemBtn.disabled = false;
+      exportItemBtn.textContent = originalLabel;
+    }
+  }
+
+  if (exportItemBtn) {
+    if (isReadOnly) {
+      exportItemBtn.classList.add('hidden');
+    } else {
+      exportItemBtn.addEventListener('click', exportItemAsPdf);
+      // Show only when an account template is configured.
+      api(`/api/accounts/${accountId}/template`)
+        .then(() => { exportItemBtn.classList.remove('hidden'); })
+        .catch(() => { exportItemBtn.classList.add('hidden'); });
+    }
+  }
 
   function closeImageModal() {
     if (imageModal) imageModal.classList.add('hidden');

@@ -1,4 +1,4 @@
-import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences, escapeHtml } from './common.js';
+import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences, escapeHtml, getToken } from './common.js';
 
 function qs(name) {
   const m = new URLSearchParams(location.search).get(name);
@@ -380,6 +380,8 @@ function saveItemZoom(accountId, slug, zoomPercent) {
   const templateFromPrefs = parseTemplate(loadColumnTemplate(accountId, slug));
   let schemaFields = templateFromPrefs.fields || [];
   let itemsData = [];
+  let currentVisibleItems = [];
+  const selectedItemIds = new Set();
   let columnDefs = [];
   let visibleColumns = [];
   let columnCount = null;
@@ -623,15 +625,116 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     });
   }
 
+  const exportModal = document.getElementById('exportModal');
+  const exportXlsxBtn = document.getElementById('exportXlsxBtn');
+  const exportPdfBtn = document.getElementById('exportPdfBtn');
+  const exportDocxBtn = document.getElementById('exportDocxBtn');
+  const exportCancelBtn = document.getElementById('exportCancel');
+  const exportMsg = document.getElementById('exportMsg');
+  const exportItemCount = document.getElementById('exportItemCount');
+  const exportTemplateMissing = document.getElementById('exportTemplateMissing');
+  const exportTemplateLink = document.getElementById('exportTemplateLink');
+  const exportSubtitle = document.getElementById('exportSubtitle');
+  let exportTemplateAvailable = false;
+
+  function getItemsForExport() {
+    if (!currentVisibleItems.length) {
+      return [];
+    }
+    const selectedVisible = currentVisibleItems.filter(it => selectedItemIds.has(it.id));
+    return selectedVisible.length ? selectedVisible : currentVisibleItems;
+  }
+
+  function setExportButtonsBusy(busy) {
+    [exportXlsxBtn, exportPdfBtn, exportDocxBtn].forEach(b => { if (b) b.disabled = busy; });
+  }
+
+  function syncExportTemplateButtons() {
+    const enabled = exportTemplateAvailable && !!itemsData.length;
+    if (exportPdfBtn) exportPdfBtn.disabled = !enabled;
+    if (exportDocxBtn) exportDocxBtn.disabled = !enabled;
+    if (exportTemplateMissing) exportTemplateMissing.classList.toggle('hidden', exportTemplateAvailable);
+  }
+
+  async function refreshExportTemplateAvailability() {
+    try {
+      await api(`/api/accounts/${accountId}/template`);
+      exportTemplateAvailable = true;
+    } catch {
+      exportTemplateAvailable = false;
+    }
+    syncExportTemplateButtons();
+  }
+
+  function openExportModal() {
+    if (!exportModal) return;
+    if (!itemsData.length) {
+      alert(`No ${labels.items_label.toLowerCase()} to export.`);
+      return;
+    }
+    const exportItems = getItemsForExport();
+    const selectedVisibleCount = currentVisibleItems.filter(it => selectedItemIds.has(it.id)).length;
+    if (exportItemCount) exportItemCount.textContent = String(exportItems.length);
+    if (exportSubtitle) {
+      exportSubtitle.textContent = selectedVisibleCount
+        ? `Exporting ${exportItems.length} selected item(s) from ${currentVisibleItems.length} visible item(s).`
+        : `Choose a format. Exporting all ${exportItems.length} visible item(s).`;
+    }
+    if (exportMsg) exportMsg.textContent = '';
+    if (exportTemplateLink) exportTemplateLink.href = `/account.html?id=${encodeURIComponent(accountId)}`;
+    setExportButtonsBusy(false);
+    syncExportTemplateButtons();
+    if (exportXlsxBtn) exportXlsxBtn.disabled = false;
+    exportModal.classList.remove('hidden');
+  }
+
+  function closeExportModal() {
+    if (!exportModal) return;
+    exportModal.classList.add('hidden');
+  }
+
   if (exportBtn) {
     if (isReadOnly) {
       exportBtn.disabled = true;
       exportBtn.classList.add('hidden');
     } else {
       exportBtn.addEventListener('click', () => {
-        exportItems();
+        openExportModal();
       });
     }
+  }
+
+  if (exportCancelBtn) {
+    exportCancelBtn.addEventListener('click', closeExportModal);
+  }
+
+  if (exportXlsxBtn) {
+    exportXlsxBtn.addEventListener('click', () => {
+      try {
+        exportItemsXlsx();
+      } catch (err) {
+        if (exportMsg) exportMsg.textContent = `Spreadsheet export failed: ${err.message || err}`;
+        return;
+      }
+      closeExportModal();
+    });
+  }
+
+  if (exportPdfBtn) {
+    exportPdfBtn.addEventListener('click', () => exportItemsTemplate('pdf'));
+  }
+  if (exportDocxBtn) {
+    exportDocxBtn.addEventListener('click', () => exportItemsTemplate('docx'));
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && exportModal && !exportModal.classList.contains('hidden')) {
+      closeExportModal();
+    }
+  });
+
+  if (!isReadOnly) {
+    refreshExportTemplateAvailability();
   }
 
   if (addItemBtn) {
@@ -694,7 +797,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     });
   }
 
-  function buildExportColumns() {
+  function buildExportColumns(sourceItems = itemsData) {
     const cols = [];
     const seen = new Set();
     columnDefs.forEach(col => {
@@ -704,7 +807,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     });
 
     const extras = new Set();
-    itemsData.forEach(it => {
+    sourceItems.forEach(it => {
       if (it.data && typeof it.data === 'object') {
         Object.keys(it.data).forEach(k => {
           if (!seen.has(k)) extras.add(k);
@@ -720,8 +823,8 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     return cols;
   }
 
-  function prepareExportRows(columns) {
-    return itemsData.map(it => columns.map(col => {
+  function prepareExportRows(columns, sourceItems = itemsData) {
+    return sourceItems.map(it => columns.map(col => {
       if (col.key === 'name') return normalizeExportValue(it.name);
       if (col.key === 'created_at') {
         return it.created_at ? new Date(it.created_at).toISOString() : '';
@@ -924,14 +1027,15 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     return new Blob([zip], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
 
-  function exportItems() {
-    if (!itemsData.length) {
+  function exportItemsXlsx() {
+    const exportItems = getItemsForExport();
+    if (!exportItems.length) {
       alert(`No ${labels.items_label.toLowerCase()} to export.`);
       return;
     }
 
-    const columns = buildExportColumns();
-    const rows = prepareExportRows(columns);
+    const columns = buildExportColumns(exportItems);
+    const rows = prepareExportRows(columns, exportItems);
 
     const sectionName = (currentSection?.label || slug || 'section').replace(/[^a-z0-9]+/gi, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'section';
     const dateStamp = new Date().toISOString().split('T')[0];
@@ -948,6 +1052,62 @@ function saveItemZoom(accountId, slug, zoomPercent) {
       URL.revokeObjectURL(url);
       link.remove();
     }, 0);
+  }
+
+  async function exportItemsTemplate(format) {
+    const exportItems = getItemsForExport();
+    if (!exportItems.length) {
+      if (exportMsg) exportMsg.textContent = `No ${labels.items_label.toLowerCase()} to export.`;
+      return;
+    }
+    if (!exportTemplateAvailable) {
+      if (exportMsg) exportMsg.textContent = 'No template uploaded for this account.';
+      return;
+    }
+    setExportButtonsBusy(true);
+    if (exportMsg) exportMsg.textContent = format === 'pdf' ? 'Building PDF…' : 'Building document…';
+
+    try {
+      const token = getToken();
+      const itemIds = exportItems.map(it => it.id).filter(Boolean);
+      const res = await fetch(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}/export`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: 'Bearer ' + token } : {}),
+        },
+        body: JSON.stringify({ item_ids: itemIds, format }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText);
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      const sectionName = (currentSection?.label || slug || 'section').replace(/[^a-z0-9]+/gi, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'section';
+      const dateStamp = new Date().toISOString().split('T')[0];
+      const ext = format === 'pdf' ? 'pdf' : 'docx';
+      const filename = `${sectionName}_${dateStamp}.${ext}`;
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        link.remove();
+      }, 0);
+      if (exportMsg) exportMsg.textContent = 'Done.';
+      closeExportModal();
+    } catch (err) {
+      if (exportMsg) exportMsg.textContent = `Export failed: ${err.message || err}`;
+    } finally {
+      setExportButtonsBusy(false);
+      syncExportTemplateButtons();
+    }
   }
 
   function setExportEnabled(enabled) {
@@ -989,6 +1149,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
       });
     }
 
+    currentVisibleItems = sortItems(displayItems);
     if (!displayItems.length) {
       itemsTableContainer.innerHTML = '';
       if (itemsEmptyState) {
@@ -1020,8 +1181,16 @@ function saveItemZoom(accountId, slug, zoomPercent) {
       return `<th><button type="button" class="sort-toggle" data-key="${escapeHtml(col.key)}" aria-sort="${ariaSort}">${escapeHtml(col.label)} ${renderSortIndicator(col)}</button></th>`;
     }).join('');
 
-    const rowsHtml = sortItems(displayItems).map(it => {
+    const selectedVisibleCount = currentVisibleItems.filter(it => selectedItemIds.has(it.id)).length;
+    const allVisibleSelected = currentVisibleItems.length > 0 && selectedVisibleCount === currentVisibleItems.length;
+
+    const rowsHtml = currentVisibleItems.map(it => {
       const cells = [];
+      cells.push(
+        `<td style="width:1%;white-space:nowrap;">` +
+        `<input type="checkbox" data-item-select data-item-id="${escapeHtml(it.id)}"${selectedItemIds.has(it.id) ? ' checked' : ''} aria-label="Select ${escapeHtml(it.name || 'item')}" />` +
+        `</td>`
+      );
       for (const col of activeColumns) {
         if (col.key === 'name') {
           cells.push(`<td>${escapeHtml(it.name)}</td>`);
@@ -1065,7 +1234,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
       return `<tr>${cells.join('')}</tr>`;
     }).join('');
 
-    itemsTableContainer.innerHTML = `<div class="table-wrapper"><table><thead><tr>${headerCells}<th></th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+    itemsTableContainer.innerHTML = `<div class="table-wrapper"><table><thead><tr><th style="width:1%;white-space:nowrap;"><input type="checkbox" id="selectAllVisibleItems"${allVisibleSelected ? ' checked' : ''} aria-label="Select all visible items" /></th>${headerCells}<th></th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
     const headerButtons = itemsTableContainer.querySelectorAll('.sort-toggle');
     headerButtons.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1141,6 +1310,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
         try {
           await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
           itemsData = itemsData.filter(item => item.id !== itemId);
+          selectedItemIds.delete(itemId);
           renderItemsTable(itemSearch ? itemSearch.value : '');
         } catch (err) {
           alert(err.message || 'Failed to delete item');
@@ -1149,12 +1319,40 @@ function saveItemZoom(accountId, slug, zoomPercent) {
         }
       });
     });
+
+    const selectAllVisibleEl = document.getElementById('selectAllVisibleItems');
+    if (selectAllVisibleEl) {
+      selectAllVisibleEl.addEventListener('change', () => {
+        if (selectAllVisibleEl.checked) {
+          currentVisibleItems.forEach(it => selectedItemIds.add(it.id));
+        } else {
+          currentVisibleItems.forEach(it => selectedItemIds.delete(it.id));
+        }
+        renderItemsTable(itemSearch ? itemSearch.value : '');
+      });
+    }
+
+    const rowCheckboxes = itemsTableContainer.querySelectorAll('input[data-item-select]');
+    rowCheckboxes.forEach(chk => {
+      chk.addEventListener('change', () => {
+        const itemId = chk.getAttribute('data-item-id');
+        if (!itemId) return;
+        if (chk.checked) selectedItemIds.add(itemId);
+        else selectedItemIds.delete(itemId);
+      });
+    });
   }
 
   async function loadItems() {
     try {
       const page = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}/items?limit=200`);
       itemsData = page.items || [];
+      const itemIds = new Set(itemsData.map(item => item.id));
+      for (const selectedId of Array.from(selectedItemIds)) {
+        if (!itemIds.has(selectedId)) {
+          selectedItemIds.delete(selectedId);
+        }
+      }
       setExportEnabled(itemsData.length > 0);
       columnDefs = buildColumnDefs(itemsData);
       const stored = loadColumnPrefs(accountId, slug);

@@ -383,6 +383,8 @@ function renderStatusText(label, count) {
 
     if (action === 'add-section') {
       openModal();
+    } else if (action === 'template-settings') {
+      window.location.href = `/account-template.html?id=${encodeURIComponent(accountId)}`;
     } else if (action === 'edit') {
       const next = prompt('Account name', accountName);
       if (!next) return;

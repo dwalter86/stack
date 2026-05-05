@@ -118,3 +118,12 @@ class SectionNoteOut(BaseModel):
     user_name: Optional[str] = None
     note: str
     created_at: datetime
+
+class TemplateInfo(BaseModel):
+    filename: str
+    updated_at: datetime
+    uploaded_by: Optional[str] = None
+
+class ExportRequest(BaseModel):
+    item_ids: Optional[List[str]] = None
+    format: Literal["pdf", "docx"] = "pdf"

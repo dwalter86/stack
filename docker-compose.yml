@@ -55,11 +55,17 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES}
       API_IP_ALLOWLIST: ${API_IP_ALLOWLIST}
+      GOTENBERG_URL: http://gotenberg:3000
     depends_on:
       db:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    networks: [backend]
+
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    restart: unless-stopped
     networks: [backend]
 
   web:

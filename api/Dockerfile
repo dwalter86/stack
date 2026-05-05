@@ -7,6 +7,10 @@ RUN pip install --no-cache-dir \
     email-validator \
     sqlalchemy \
     psycopg[binary] \
-    python-jose[cryptography]
+    python-jose[cryptography] \
+    python-multipart \
+    httpx \
+    docxtpl \
+    python-docx
 COPY app /app
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

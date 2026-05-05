@@ -92,6 +92,27 @@
       </div>
     </div>
 
+    <!-- Modal for choosing export format -->
+    <div id="exportModal" class="modal-backdrop hidden">
+      <div class="modal">
+        <h2>Export</h2>
+        <p class="small" id="exportSubtitle">Choose a format. Showing <strong id="exportItemCount">0</strong> items.</p>
+        <div id="exportTemplateMissing" class="small hidden" style="margin:8px 0;color:#b00020;">
+          No template uploaded for this account.
+          <a href="#" id="exportTemplateLink">Upload one on the account page</a> to enable PDF and Word exports.
+        </div>
+        <div class="modal-actions" style="flex-wrap:wrap;justify-content:flex-start;">
+          <button type="button" class="btn primary" id="exportPdfBtn">PDF (from template)</button>
+          <button type="button" class="btn" id="exportDocxBtn">Word (.docx)</button>
+          <button type="button" class="btn" id="exportXlsxBtn">Spreadsheet (.xlsx)</button>
+        </div>
+        <p id="exportMsg" class="small" style="margin-top:8px;"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="exportCancel">Close</button>
+        </div>
+      </div>
+    </div>
+
     <div id="editSectionModal" class="modal-backdrop hidden">
       <div class="modal">
         <h2>Edit section</h2>
