@@ -85,6 +85,7 @@ def build_context(
 
   # Convenience aliases for single-item templates.
   first = normalised_items[0] if normalised_items else {"name": "", "data": {}, "created_at": ""}
+  context.setdefault("item", first)
   context.setdefault("name", first["name"])
   context.setdefault("data", first["data"])
   context.setdefault("created_at", first["created_at"])
@@ -203,6 +204,9 @@ def generate_starter_template(account_name: str, sections: Iterable[dict]) -> by
     "when exporting many they resolve to the first item."
   )
   for token, desc in [
+    ("{{ item.name }}", "Item name (object alias)"),
+    ("{{ item.created_at }}", "Item created date (object alias)"),
+    ("{{ item.data.<field_key> }}", "Item field value (object alias)"),
     ("{{ name }}", "Item name"),
     ("{{ created_at }}", "Item created date"),
     ("{{ data.<field_key> }}", "Any field on the item — see your sections below"),
