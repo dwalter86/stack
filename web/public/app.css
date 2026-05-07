@@ -338,6 +338,18 @@ label {
   border: 1px solid #bbf7d0;
 }
 
+#itemsTableContainer tr.item-row-status-red td {
+  background: #fff1f2;
+}
+
+#itemsTableContainer tr.item-row-status-yellow td {
+  background: #fffbeb;
+}
+
+#itemsTableContainer tr.item-row-status-green td {
+  background: #f0fdf4;
+}
+
 pre {
   background: #f4f4f4;
   padding: 8px;

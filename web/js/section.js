@@ -5,6 +5,38 @@ function qs(name) {
   return m && decodeURIComponent(m);
 }
 
+function parseStatusSummaryConfig(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const fieldKey = String(raw.field_key || '').trim();
+  if (!raw.enabled || !fieldKey) return null;
+
+  const normalizeValues = (arr) => {
+    if (!Array.isArray(arr)) return new Set();
+    return new Set(
+      arr
+        .map(v => String(v).trim().toLowerCase())
+        .filter(Boolean)
+    );
+  };
+
+  const red = normalizeValues(raw.red_values);
+  const yellow = normalizeValues(raw.yellow_values);
+  const green = normalizeValues(raw.green_values);
+  if (!red.size && !yellow.size && !green.size) return null;
+
+  return { fieldKey, red, yellow, green };
+}
+
+function getItemStatusClass(item, config) {
+  if (!config) return '';
+  const value = String(item?.data?.[config.fieldKey] ?? '').trim().toLowerCase();
+  if (!value) return '';
+  if (config.red.has(value)) return 'item-row-status-red';
+  if (config.yellow.has(value)) return 'item-row-status-yellow';
+  if (config.green.has(value)) return 'item-row-status-green';
+  return '';
+}
+
 function renderObjectTable(obj) {
   const entries = Object.entries(obj || {});
   if (!entries.length) return '<span class="muted">{}</span>';
@@ -388,6 +420,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
   const savedSort = loadSortPref(accountId, slug);
   let sortState = savedSort || { key: 'created_at', direction: 'desc' };
   let itemZoom = loadItemZoom(accountId, slug);
+  let statusSummaryConfig = null;
 
   function applyItemZoom() {
     const normalized = normalizeZoomValue(itemZoom);
@@ -441,12 +474,14 @@ function saveItemZoom(accountId, slug, zoomPercent) {
       const schema = section.schema || {};
       const apiFields = parseTemplate(schema).fields || [];
       schemaFields = templateFromPrefs.fields.length ? templateFromPrefs.fields : apiFields;
+      statusSummaryConfig = parseStatusSummaryConfig(schema.status_summary);
       document.title = `${section.label} | ${labels.sections_label}`;
     } catch {
       titleEl.textContent = `Section ${slug}`;
       metaEl.textContent = showSlugs ? `${accountName} · slug: ${slug}` : accountName;
       currentSection = { slug, label: slug, schema: {} };
       schemaFields = templateFromPrefs.fields.length ? templateFromPrefs.fields : [];
+      statusSummaryConfig = null;
       document.title = `${labels.sections_label} ${slug}`;
     }
   }
@@ -1231,7 +1266,8 @@ function saveItemZoom(accountId, slug, zoomPercent) {
         `${commentsBtn} ` +
         `${deleteBtn}` +
         `</td>`);
-      return `<tr>${cells.join('')}</tr>`;
+      const rowStatusClass = getItemStatusClass(it, statusSummaryConfig);
+      return `<tr class="${rowStatusClass}">${cells.join('')}</tr>`;
     }).join('');
 
     itemsTableContainer.innerHTML = `<div class="table-wrapper"><table><thead><tr><th style="width:1%;white-space:nowrap;"><input type="checkbox" id="selectAllVisibleItems"${allVisibleSelected ? ' checked' : ''} aria-label="Select all visible items" /></th>${headerCells}<th></th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
