@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import os
 import zipfile
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -27,6 +28,372 @@ class TemplateRenderError(Exception):
 
 class PdfConversionError(Exception):
   """Raised when Gotenberg cannot convert the docx to PDF."""
+
+
+# OOXML namespaces (Word comments + body).
+_NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+_NS_W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
+_NS_W15 = "http://schemas.microsoft.com/office/word/2012/wordml"
+_XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
+
+ET.register_namespace("w", _NS_W)
+
+
+def _qn(tag: str) -> str:
+  return f"{{{_NS_W}}}{tag}"
+
+
+def _localname(tag: str) -> str:
+  if "}" in tag:
+    return tag.rsplit("}", 1)[-1]
+  return tag
+
+
+def _attr_id(elem: ET.Element) -> str | None:
+  """Resolve `w:id` / namespaced id attribute."""
+  for key, val in elem.attrib.items():
+    if key.endswith("}id") or key == "id":
+      return val
+  return None
+
+
+def _parent_map(root: ET.Element) -> dict[ET.Element, ET.Element]:
+  m: dict[ET.Element, ET.Element] = {}
+  for parent in root.iter():
+    for child in parent:
+      m[child] = parent
+  return m
+
+
+def _dfs_preorder(elem: ET.Element) -> list[ET.Element]:
+  out: list[ET.Element] = [elem]
+  for child in elem:
+    out.extend(_dfs_preorder(child))
+  return out
+
+
+def _tree_depth(elem: ET.Element, parents: dict[ET.Element, ET.Element]) -> int:
+  d = 0
+  cur: ET.Element | None = elem
+  while cur is not None:
+    d += 1
+    cur = parents.get(cur)
+  return d
+
+
+def _parse_comments_xml(data: bytes) -> dict[str, dict[str, Any]]:
+  """Map comment id -> {text, para_id}."""
+  root = ET.fromstring(data)
+  out: dict[str, dict[str, Any]] = {}
+  for cm in root:
+    if _localname(cm.tag) != "comment":
+      continue
+    cid = _attr_id(cm)
+    if cid is None:
+      continue
+    para_id: str | None = None
+    text_parts: list[str] = []
+    for node in cm.iter():
+      if _localname(node.tag) == "t" and node.text:
+        text_parts.append(node.text)
+      if _localname(node.tag) == "p":
+        pid = node.get(f"{{{_NS_W14}}}paraId")
+        if pid:
+          para_id = pid
+    out[cid] = {"text": "".join(text_parts).strip(), "para_id": para_id}
+  return out
+
+
+def _parse_comments_extended_resolved(data: bytes) -> set[str]:
+  """Para ids marked resolved (done) in commentsExtended.xml."""
+  root = ET.fromstring(data)
+  resolved: set[str] = set()
+  for el in root.iter():
+    if _localname(el.tag) != "commentEx":
+      continue
+    para_id = el.get(f"{{{_NS_W15}}}paraId")
+    done = el.get(f"{{{_NS_W15}}}done")
+    if para_id and done == "1":
+      resolved.add(para_id)
+  return resolved
+
+
+def _pair_comment_markers(body: ET.Element, parents: dict[ET.Element, ET.Element]) -> list[tuple[str, ET.Element, ET.Element]]:
+  """Pair commentRangeStart with commentRangeEnd by id using document-order stack."""
+  pairs: list[tuple[str, ET.Element, ET.Element]] = []
+  stack: list[tuple[str, ET.Element]] = []
+  for el in _dfs_preorder(body):
+    ln = _localname(el.tag)
+    if ln == "commentRangeStart":
+      cid = _attr_id(el)
+      if cid is not None:
+        stack.append((cid, el))
+    elif ln == "commentRangeEnd":
+      cid = _attr_id(el)
+      if cid is None:
+        continue
+      if not stack or stack[-1][0] != cid:
+        continue
+      _, start_el = stack.pop()
+      pairs.append((cid, start_el, el))
+  return pairs
+
+
+def _collect_range_inclusive(body: ET.Element, start_el: ET.Element, end_el: ET.Element) -> list[ET.Element]:
+  """All elements from start_el through end_el in preorder DFS under body."""
+  acc: list[ET.Element] = []
+  inside = False
+  for el in _dfs_preorder(body):
+    if el is start_el:
+      inside = True
+    if inside:
+      acc.append(el)
+      if el is end_el:
+        break
+  return acc
+
+
+def _make_run_with_text(text: str) -> ET.Element:
+  r_el = ET.Element(_qn("r"))
+  t_el = ET.Element(_qn("t"))
+  if text.startswith(" ") or text.endswith(" ") or "\n" in text:
+    t_el.set(_XML_SPACE, "preserve")
+  t_el.text = text
+  r_el.append(t_el)
+  return r_el
+
+
+def _remove_elements_deepest_first(elems: Iterable[ET.Element], parents: dict[ET.Element, ET.Element]) -> None:
+  sorted_elems = sorted(elems, key=lambda e: _tree_depth(e, parents), reverse=True)
+  for el in sorted_elems:
+    par = parents.get(el)
+    if par is not None:
+      try:
+        par.remove(el)
+      except ValueError:
+        pass
+
+
+def _remove_comment_reference_runs(root: ET.Element, cid: str, parents: dict[ET.Element, ET.Element]) -> None:
+  """Remove w:r runs that only contain w:commentReference for this id."""
+  to_remove: list[ET.Element] = []
+  for el in root.iter():
+    if _localname(el.tag) != "commentReference":
+      continue
+    if _attr_id(el) != cid:
+      continue
+    par = parents.get(el)
+    if par is None or _localname(par.tag) != "r":
+      continue
+    only_ref = True
+    for child in par:
+      if _localname(child.tag) != "commentReference":
+        only_ref = False
+        break
+    if only_ref:
+      to_remove.append(par)
+  _remove_elements_deepest_first(to_remove, parents)
+
+
+def _strip_all_comment_markup(root: ET.Element) -> None:
+  """Best-effort cleanup for any remaining comment tags in document.xml."""
+  parents = _parent_map(root)
+  # Remove all range markers globally.
+  markers: list[ET.Element] = []
+  for el in root.iter():
+    ln = _localname(el.tag)
+    if ln in ("commentRangeStart", "commentRangeEnd"):
+      markers.append(el)
+  _remove_elements_deepest_first(markers, parents)
+
+  # Remove all comment references. Prefer removing the whole run when it only
+  # contains commentReference nodes; otherwise remove just the node.
+  parents = _parent_map(root)
+  refs = [el for el in root.iter() if _localname(el.tag) == "commentReference"]
+  to_remove_runs: list[ET.Element] = []
+  to_remove_nodes: list[ET.Element] = []
+  for ref in refs:
+    par = parents.get(ref)
+    if par is None:
+      continue
+    if _localname(par.tag) == "r":
+      only_refs = all(_localname(ch.tag) == "commentReference" for ch in par)
+      if only_refs:
+        to_remove_runs.append(par)
+      else:
+        to_remove_nodes.append(ref)
+    else:
+      to_remove_nodes.append(ref)
+  _remove_elements_deepest_first(to_remove_runs, parents)
+  parents = _parent_map(root)
+  _remove_elements_deepest_first(to_remove_nodes, parents)
+
+
+_COMMENT_PART_NAMES_LOWER = frozenset({
+  "word/comments.xml",
+  "word/commentsextended.xml",
+  "word/commentsids.xml",
+  "word/commentsextensible.xml",
+})
+
+
+def _patch_content_types_and_rels(docx_bytes: bytes) -> bytes:
+  """Remove Overrides for stripped comment parts and Relationships pointing at them."""
+  buf = io.BytesIO(docx_bytes)
+  out_buf = io.BytesIO()
+
+  with zipfile.ZipFile(buf, "r") as zin:
+    names_lower = {n.lower(): n for n in zin.namelist()}
+    with zipfile.ZipFile(out_buf, "w", zipfile.ZIP_DEFLATED) as zout:
+      for info in zin.infolist():
+        name = info.filename
+        ln = name.lower()
+
+        if ln == "[content_types].xml":
+          data = zin.read(name)
+          try:
+            root = ET.fromstring(data)
+            children = list(root)
+            for child in children:
+              tag = _localname(child.tag)
+              part = (child.get("PartName") or "").lstrip("/").lower()
+              ctype = (child.get("ContentType") or "").lower()
+              if tag == "Override":
+                # Strip any comments part override (comments.xml, commentsExtended.xml,
+                # commentsExtensible.xml, etc).
+                if "comment" in part or "comment" in ctype:
+                  root.remove(child)
+              elif tag == "Default":
+                # Some files declare comment content-types on Default entries.
+                if "comment" in ctype:
+                  root.remove(child)
+            data = ET.tostring(root, encoding="utf-8", xml_declaration=True, default_namespace=None)
+          except ET.ParseError:
+            pass
+          zout.writestr(info, data)
+          continue
+
+        if ln == "word/_rels/document.xml.rels":
+          data = zin.read(name)
+          try:
+            root = ET.fromstring(data)
+            children = list(root)
+            for child in children:
+              if child.tag.endswith("Relationship"):
+                tgt = (child.get("Target") or "").lower()
+                rel_type = (child.get("Type") or "").lower()
+                # Remove all comment-related relationships, including
+                # commentsExtensible/commentsExtended variants.
+                if "comment" in rel_type or "comment" in tgt:
+                  root.remove(child)
+            data = ET.tostring(root, encoding="utf-8", xml_declaration=True, default_namespace=None)
+          except ET.ParseError:
+            pass
+          zout.writestr(info, data)
+          continue
+
+        zout.writestr(info, zin.read(name))
+
+  return out_buf.getvalue()
+
+
+def _apply_comment_placeholders(template_bytes: bytes) -> bytes:
+  """Replace highlighted regions with Jinja from Word comments; strip comment XML parts.
+
+  If there are no comments in the package, returns template_bytes unchanged.
+  """
+  try:
+    with zipfile.ZipFile(io.BytesIO(template_bytes), "r") as zf:
+      names = set(zf.namelist())
+      by_lower = {n.replace("\\", "/").lower(): n for n in names}
+      if "word/comments.xml" not in by_lower:
+        return template_bytes
+
+      comments_raw = zf.read(by_lower["word/comments.xml"])
+      comments_map = _parse_comments_xml(comments_raw)
+
+      resolved_para: set[str] = set()
+      if "word/commentsextended.xml" in by_lower:
+        resolved_para = _parse_comments_extended_resolved(zf.read(by_lower["word/commentsextended.xml"]))
+
+      doc_xml = zf.read("word/document.xml")
+      root = ET.fromstring(doc_xml)
+      body = root.find(_qn("body"))
+      if body is None:
+        return template_bytes
+
+      parents = _parent_map(root)
+      pairs = _pair_comment_markers(body, parents)
+
+      for cid, start_el, end_el in pairs:
+        meta = comments_map.get(cid, {})
+        text = (meta.get("text") or "").strip()
+        para_id = meta.get("para_id")
+        is_resolved = bool(para_id and para_id in resolved_para)
+
+        if is_resolved or not text:
+          # Keep highlighted text; drop only range markers and comment references.
+          try:
+            ps = parents.get(start_el)
+            if ps is not None:
+              ps.remove(start_el)
+          except ValueError:
+            pass
+          parents = _parent_map(root)
+          try:
+            pe = parents.get(end_el)
+            if pe is not None:
+              pe.remove(end_el)
+          except ValueError:
+            pass
+          parents = _parent_map(root)
+          _remove_comment_reference_runs(root, cid, parents)
+          parents = _parent_map(root)
+          continue
+
+        rng = _collect_range_inclusive(body, start_el, end_el)
+        new_run = _make_run_with_text(text)
+        par_s = parents.get(start_el)
+        if par_s is None:
+          continue
+        try:
+          idx = list(par_s).index(start_el)
+        except ValueError:
+          continue
+        par_s.insert(idx, new_run)
+        parents = _parent_map(root)
+        _remove_elements_deepest_first(rng, parents)
+        parents = _parent_map(root)
+        _remove_comment_reference_runs(root, cid, parents)
+        parents = _parent_map(root)
+
+      # Defensive pass: ensure no comment markup survives in document.xml.
+      _strip_all_comment_markup(root)
+
+      doc_out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+      buf = io.BytesIO()
+      with zipfile.ZipFile(io.BytesIO(template_bytes), "r") as zin:
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zout:
+          doc_written = False
+          for info in zin.infolist():
+            fn = info.filename.replace("\\", "/")
+            fl = fn.lower()
+            if fl in _COMMENT_PART_NAMES_LOWER:
+              continue
+            if fl == "word/document.xml":
+              zout.writestr(info, doc_out)
+              doc_written = True
+            else:
+              zout.writestr(info, zin.read(info.filename))
+          if not doc_written:
+            zout.writestr("word/document.xml", doc_out)
+
+      merged = buf.getvalue()
+      return _patch_content_types_and_rels(merged)
+
+  except Exception as exc:
+    raise TemplateRenderError(f"Failed to read template comments: {exc}") from exc
 
 
 def validate_docx_bytes(content: bytes) -> None:
@@ -98,6 +465,7 @@ def render_template(template_bytes: bytes, context: dict) -> bytes:
   Uses Jinja's StrictUndefined so typos surface as TemplateRenderError instead of
   silently rendering as empty strings.
   """
+  template_bytes = _apply_comment_placeholders(template_bytes)
   doc = DocxTemplate(io.BytesIO(template_bytes))
   jinja_env = Environment(undefined=StrictUndefined, autoescape=False)
   try:
@@ -177,7 +545,26 @@ def generate_starter_template(account_name: str, sections: Iterable[dict]) -> by
     "{%tr for item in items %} ... {%tr endfor %} — repeat a table row (use inside a 1-row table)",
   ]
   for line in syntax_lines:
-    p = doc.add_paragraph(line, style="List Bullet")
+    doc.add_paragraph(line, style="List Bullet")
+
+  doc.add_heading("Comment-driven placeholders (Word)", level=1)
+  doc.add_paragraph(
+    "Instead of typing Jinja into the document body, you can keep readable text on the page "
+    "and put the placeholder in a Word comment on that text."
+  )
+  doc.add_paragraph(
+    "Steps: type readable text (for example Customer Name), highlight it, insert a comment on "
+    "the selection, and type the full placeholder there (for example {{ data.customer_name }}). "
+    "On export, the highlighted text is replaced by that placeholder before rendering."
+  )
+  doc.add_paragraph(
+    "Resolved / completed comments: if you mark the comment as done in Word, the placeholder "
+    "is skipped and the original highlighted text stays in the export."
+  )
+  doc.add_paragraph(
+    "Loops and conditionals ({%p for ... %}, {% if ... %}) should stay inline in the document "
+    "body — do not put those inside comments."
+  )
 
   doc.add_heading("Global placeholders", level=1)
   globals_table = [
@@ -257,7 +644,7 @@ def generate_starter_template(account_name: str, sections: Iterable[dict]) -> by
   doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
   doc.add_heading("Tips", level=1)
   for tip in [
-    "Type each {{ ... }} placeholder in one go — Word can split a token across formatting runs and break rendering.",
+    "Type each {{ ... }} placeholder in one go — Word can split a token across formatting runs and break rendering (comment-driven placeholders avoid this for body text).",
     "For repeating table rows, put the {%tr for item in items %} on the first cell of the row and {%tr endfor %} on the last cell of the same row.",
     "Unknown placeholders (typos) will return a 400 error at export time so you know to fix them.",
   ]:
