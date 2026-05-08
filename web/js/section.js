@@ -399,6 +399,20 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     notesBtn.href = `/notes.html?account_id=${encodeURIComponent(accountId)}&section_slug=${encodeURIComponent(slug)}`;
   }
 
+  async function updateNotesButtonLabel() {
+    if (!notesBtn) return;
+    notesBtn.textContent = 'Notes';
+    try {
+      const notes = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}/notes`);
+      const noteCount = Array.isArray(notes) ? notes.length : 0;
+      if (noteCount > 0) {
+        notesBtn.textContent = `Notes x ${noteCount}`;
+      }
+    } catch {
+      // Keep default label when notes cannot be loaded.
+    }
+  }
+
   let accountName = `Account ${accountId}`;
   try {
     const myAccounts = await api('/api/me/accounts');
@@ -1563,6 +1577,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
   }
 
   await loadSectionMeta();
+  await updateNotesButtonLabel();
   applyItemZoom();
   await loadItems();
 })();
