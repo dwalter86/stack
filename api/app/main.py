@@ -851,7 +851,7 @@ async def update_user(user_id: str, body: AdminUserUpdate, admin_ctx=Depends(req
             if body.accounts:
                 ids = list(set(body.accounts))
                 db.execute(
-                    text("INSERT INTO memberships(user_id, account_id, role) SELECT :u, a.id, 'owner' FROM accounts a WHERE a.id = ANY(:ids::uuid[]) ON CONFLICT DO NOTHING"),
+                    text("INSERT INTO memberships(user_id, account_id, role) SELECT :u, a.id, 'owner' FROM accounts a WHERE a.id = ANY(:ids) ON CONFLICT DO NOTHING"),
                     {"u": user_id, "ids": ids}
                 )
 
