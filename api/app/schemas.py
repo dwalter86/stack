@@ -66,6 +66,7 @@ class AdminUser(BaseModel):
     user_type: str
     is_active: bool
     preferences: Optional[Preferences] = None
+    accounts: Optional[list[str]] = None
 
 class CreateAdmin(BaseModel):
     email: EmailStr

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -20,6 +21,95 @@ from jinja2.exceptions import UndefinedError, TemplateSyntaxError, TemplateError
 GOTENBERG_URL = os.environ.get("GOTENBERG_URL", "http://gotenberg:3000")
 MAX_TEMPLATE_BYTES = 5 * 1024 * 1024
 MAX_ITEMS_PER_EXPORT = 500
+
+
+def _element_text(elem: ET.Element) -> str:
+  return "".join(node.text or "" for node in elem.iter() if _localname(node.tag) == "t")
+
+
+def _strip_text_token(elem: ET.Element, pattern: re.Pattern[str]) -> bool:
+  changed = False
+  for node in elem.iter():
+    if _localname(node.tag) != "t" or not node.text:
+      continue
+    new_text = pattern.sub("", node.text)
+    if new_text != node.text:
+      node.text = new_text
+      changed = True
+  return changed
+
+
+def _remove_empty_tag_cells(tr: ET.Element) -> int:
+  removed = 0
+  for tc in list(tr):
+    if _localname(tc.tag) != "tc":
+      continue
+    if _element_text(tc).strip():
+      continue
+    tr.remove(tc)
+    removed += 1
+  return removed
+
+
+def _insert_table_row_loop(tbl: ET.Element, tr: ET.Element, for_expr: str) -> None:
+  siblings = list(tbl)
+  try:
+    idx = siblings.index(tr)
+  except ValueError:
+    return
+  open_tag = f"{{% {for_expr} %}}"
+  close_tag = "{% endfor %}"
+  if idx == 0:
+    tbl.text = f"{tbl.text or ''}{open_tag}"
+  else:
+    prev = siblings[idx - 1]
+    prev.tail = f"{prev.tail or ''}{open_tag}"
+  tr.tail = f"{close_tag}{tr.tail or ''}"
+
+
+def _rewrite_inline_table_row_loops(template_bytes: bytes) -> bytes:
+  """Support `{%tr for ... %}` and `{%tr endfor %}` placed in the same row.
+
+  docxtpl only supports one `{%tr ... %}` extension tag per table row. Older
+  app guidance told users to put both tags in the same row, so we rewrite that
+  pattern to plain Jinja surrounding the whole `<w:tr>`.
+  """
+  try:
+    with zipfile.ZipFile(io.BytesIO(template_bytes), "r") as zin:
+      doc_xml = zin.read("word/document.xml")
+      root = ET.fromstring(doc_xml)
+      parents = _parent_map(root)
+      changed = False
+      for tr in root.iter(_qn("tr")):
+        row_text = _element_text(tr)
+        for_match = re.search(r"\{%tr\s+(for\b.*?)%\}", row_text)
+        end_match = re.search(r"\{%tr\s+endfor\s*%\}", row_text)
+        if not for_match or not end_match:
+          continue
+        tbl = parents.get(tr)
+        if tbl is None or _localname(tbl.tag) != "tbl":
+          continue
+        _strip_text_token(tr, re.compile(r"\{%tr\s+for\b.*?%\}"))
+        _strip_text_token(tr, re.compile(r"\{%tr\s+endfor\s*%\}"))
+        _remove_empty_tag_cells(tr)
+        _insert_table_row_loop(tbl, tr, for_match.group(1).strip())
+        changed = True
+  except Exception:
+    return template_bytes
+
+  if not changed:
+    return template_bytes
+
+  doc_out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+  buf = io.BytesIO()
+  with zipfile.ZipFile(io.BytesIO(template_bytes), "r") as zin:
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zout:
+      for info in zin.infolist():
+        if info.filename.replace("\\", "/").lower() == "word/document.xml":
+          zout.writestr(info, doc_out)
+        else:
+          zout.writestr(info, zin.read(info.filename))
+  return buf.getvalue()
 
 
 class TemplateRenderError(Exception):
@@ -466,8 +556,13 @@ def render_template(template_bytes: bytes, context: dict) -> bytes:
   silently rendering as empty strings.
   """
   template_bytes = _apply_comment_placeholders(template_bytes)
+  template_bytes = _rewrite_inline_table_row_loops(template_bytes)
   doc = DocxTemplate(io.BytesIO(template_bytes))
-  jinja_env = Environment(undefined=StrictUndefined, autoescape=False)
+  jinja_env = Environment(
+    undefined=StrictUndefined,
+    autoescape=False,
+    finalize=lambda value: "" if value is None else value,
+  )
   try:
     doc.render(context, jinja_env=jinja_env)
   except UndefinedError as exc:

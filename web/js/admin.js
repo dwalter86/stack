@@ -22,12 +22,41 @@ const TYPE_LABELS = {
   const editUserIsActive = document.getElementById('editUserIsActive');
   const editCancelBtn = document.getElementById('editUserCancel');
   const editModalTitle = document.getElementById('editUserModalTitle');
+  const editAccountsSection = document.getElementById('editUserAccountsSection');
+  const editAccountsGrid = document.getElementById('editUserAccountsGrid');
+  const editSelectAll = document.getElementById('editUserSelectAll');
 
+  const isSuperAdmin = me.user_type === 'super_admin';
   let allUsers = []; // Cache for users
+  let allAccounts = [];
 
   const list = document.getElementById('userList');
   const emptyState = document.getElementById('usersEmptyState');
-  const showPreferences = me.user_type === 'super_admin';
+  const showPreferences = isSuperAdmin;
+
+  if (isSuperAdmin && editAccountsSection) {
+    try {
+      allAccounts = await api('/api/admin/all-accounts');
+      editAccountsGrid.innerHTML = allAccounts.map(a => `
+        <label class="card account-card" style="display:flex;justify-content:space-between;align-items:center;">
+          <div><strong>${escapeHtml(a.name)}</strong><div class="small"><code>${escapeHtml(a.id)}</code></div></div>
+          <input type="checkbox" value="${escapeHtml(a.id)}">
+        </label>
+      `).join('');
+      editAccountsSection.classList.remove('hidden');
+    } catch (e) {
+      editAccountsGrid.innerHTML = `<p class="small">Failed to load accounts: ${escapeHtml(e.message)}</p>`;
+      editAccountsSection.classList.remove('hidden');
+    }
+  }
+
+  if (editSelectAll && editAccountsGrid) {
+    editSelectAll.addEventListener('change', () => {
+      editAccountsGrid.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.checked = editSelectAll.checked;
+      });
+    });
+  }
 
   function renderPrefs(user) {
     if (!showPreferences || !user.preferences) return '';
@@ -108,6 +137,17 @@ const TYPE_LABELS = {
     editUserIsActive.checked = user.is_active;
     editModalTitle.textContent = `Edit User: ${user.name || user.email}`;
 
+    if (isSuperAdmin && editAccountsGrid) {
+      const selected = new Set(user.accounts || []);
+      editAccountsGrid.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.checked = selected.has(cb.value);
+      });
+      if (editSelectAll) {
+        const boxes = editAccountsGrid.querySelectorAll('input[type="checkbox"]');
+        editSelectAll.checked = boxes.length > 0 && Array.from(boxes).every(cb => cb.checked);
+      }
+    }
+
     // Super admins can't be demoted by regular admins
     const typeSelect = document.getElementById('editUserType');
     if (me.user_type !== 'super_admin') {
@@ -161,6 +201,11 @@ const TYPE_LABELS = {
         user_type: editUserType.value,
         is_active: editUserIsActive.checked,
       };
+      if (isSuperAdmin && editAccountsGrid) {
+        payload.accounts = Array.from(
+          editAccountsGrid.querySelectorAll('input[type="checkbox"]:checked')
+        ).map(cb => cb.value);
+      }
 
       try {
         const updatedUser = await api(`/api/admin/users/${userId}`, {

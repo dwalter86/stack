@@ -730,6 +730,13 @@ async def export_section(
 
 # --- Admin API ---
 
+def account_ids_for_user(db, user_id: str) -> list[str]:
+  rows = db.execute(
+    text("SELECT account_id::text FROM memberships WHERE user_id = :u ORDER BY account_id"),
+    {"u": user_id},
+  ).all()
+  return [r[0] for r in rows]
+
 @app.get("/api/admin/users", response_model=list[AdminUser], dependencies=[Depends(ip_allowlist)])
 async def list_admin_users(admin_ctx = Depends(require_admin)):
   with SessionLocal() as db:
@@ -742,11 +749,16 @@ async def list_admin_users(admin_ctx = Depends(require_admin)):
       FROM users
       ORDER BY created_at DESC
     """)).all()
-    include_prefs = admin_ctx.get("user_type") == "super_admin"
+    include_super_fields = admin_ctx.get("user_type") == "super_admin"
     result: list[AdminUser] = []
     for r in rows:
-      prefs = get_preferences(db, r[0]) if include_prefs else None
-      result.append(AdminUser(id=r[0], email=r[1], name=r[2], user_type=r[3], is_active=r[4], preferences=Preferences(**prefs) if prefs else None))
+      prefs = get_preferences(db, r[0]) if include_super_fields else None
+      accounts = account_ids_for_user(db, r[0]) if include_super_fields else None
+      result.append(AdminUser(
+        id=r[0], email=r[1], name=r[2], user_type=r[3], is_active=r[4],
+        preferences=Preferences(**prefs) if prefs else None,
+        accounts=accounts,
+      ))
     return result
 
 @app.get("/api/admin/all-accounts", response_model=list[AccountOut], dependencies=[Depends(ip_allowlist), Depends(require_admin)])
@@ -790,7 +802,12 @@ async def create_admin(body: CreateAdmin, admin_ctx = Depends(require_admin)):
       pass
     db.commit()
     prefs = get_preferences(db, new_id) if requester_type == "super_admin" else None
-    return AdminUser(id=row[0], email=row[1], name=row[2], user_type=row[3], is_active=row[4], preferences=Preferences(**prefs) if prefs else None)
+    accounts = account_ids_for_user(db, new_id) if requester_type == "super_admin" else None
+    return AdminUser(
+      id=row[0], email=row[1], name=row[2], user_type=row[3], is_active=row[4],
+      preferences=Preferences(**prefs) if prefs else None,
+      accounts=accounts,
+    )
 
 @app.put("/api/admin/users/{user_id}", response_model=AdminUser, dependencies=[Depends(ip_allowlist)])
 async def update_user(user_id: str, body: AdminUserUpdate, admin_ctx=Depends(require_admin)):
@@ -828,6 +845,8 @@ async def update_user(user_id: str, body: AdminUserUpdate, admin_ctx=Depends(req
             )
 
         if body.accounts is not None:
+            if requester_type != "super_admin":
+                raise HTTPException(status_code=403, detail="Only super admins can manage account access")
             db.execute(text("DELETE FROM memberships WHERE user_id = :id"), {"id": user_id})
             if body.accounts:
                 ids = list(set(body.accounts))
@@ -839,7 +858,12 @@ async def update_user(user_id: str, body: AdminUserUpdate, admin_ctx=Depends(req
         row = db.execute(text("SELECT id::text, email, name, user_type, is_active FROM users WHERE id=:id"), {"id": user_id}).first()
         db.commit()
         prefs = get_preferences(db, user_id) if requester_type == "super_admin" else None
-        return AdminUser(id=row[0], email=row[1], name=row[2], user_type=row[3], is_active=row[4], preferences=Preferences(**prefs) if prefs else None)
+        accounts = account_ids_for_user(db, user_id) if requester_type == "super_admin" else None
+        return AdminUser(
+          id=row[0], email=row[1], name=row[2], user_type=row[3], is_active=row[4],
+          preferences=Preferences(**prefs) if prefs else None,
+          accounts=accounts,
+        )
 
 @app.delete("/api/admin/users/{user_id}", status_code=204, dependencies=[Depends(ip_allowlist)])
 async def delete_user(user_id: str, admin_ctx=Depends(require_admin)):
