@@ -1113,3 +1113,29 @@ pre {
 @media (max-width: 700px) {
   .login-box { max-width: 100%; }
 }
+
+/* Visible-columns list on the column settings page gets more room than modal checklists */
+#columnsList { max-height: 480px; }
+
+/* Column template: input and example side by side at matched heights */
+.template-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 8px 0 4px;
+}
+.template-grid textarea {
+  height: 340px;
+  min-height: 340px;
+  resize: vertical;
+  margin-top: 4px;
+}
+.template-grid pre {
+  margin: 4px 0 0;
+  height: 340px;
+  overflow: auto;
+  font-size: 12px;
+}
+@media (max-width: 900px) {
+  .template-grid { grid-template-columns: 1fr; }
+}

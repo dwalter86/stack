@@ -32,10 +32,16 @@
       <div class="card-body" hidden>
         <p class="small">Provide a JSON template describing the columns for this section. Save the template to refresh the
           column list.</p>
-        <label for="templateInput" class="small">Template JSON</label>
-        <textarea id="templateInput" rows="12" spellcheck="false"></textarea>
-        <p class="small">Example template:</p>
-        <pre id="templateExample"></pre>
+        <div class="template-grid">
+          <div>
+            <label for="templateInput" class="small">Template JSON</label>
+            <textarea id="templateInput" class="code-input" spellcheck="false"></textarea>
+          </div>
+          <div>
+            <span class="small">Example template</span>
+            <pre id="templateExample"></pre>
+          </div>
+        </div>
         <div class="actions" style="justify-content:flex-start;">
           <button class="btn" id="saveTemplateBtn" type="button">Save template</button>
         </div>
@@ -75,7 +81,7 @@
       <div class="card-body" hidden>
         <p class="small">Choose which columns should appear in the items table for this section. Changes do not affect the
           item detail view.</p>
-        <div id="columnsList" class="stacked-list"></div>
+        <div id="columnsList" class="account-checklist" style="margin-top:12px;"></div>
         <div class="actions" style="justify-content:flex-start;">
           <button class="btn" id="saveColumnsBtn">Save</button>
         </div>

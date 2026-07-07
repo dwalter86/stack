@@ -434,13 +434,11 @@ function reconcileVisibility(columns, stored) {
     columnsList.innerHTML = columns.map(col => {
       const checked = visibleKeys.includes(col.key) ? 'checked' : '';
       const disabled = col.locked ? 'disabled' : '';
-      const note = col.locked ? '<span class="small" style="margin-left:6px;">Required</span>' : '';
+      const note = col.locked ? '<span class="small" style="margin-left:auto;">Required</span>' : '';
       return `
-        <label class="account-card" style="align-items:center;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" data-key="${escapeHtml(col.key)}" ${checked} ${disabled}>
-            <strong>${escapeHtml(col.label)}</strong>${note}
-          </div>
+        <label class="account-check">
+          <input type="checkbox" data-key="${escapeHtml(col.key)}" ${checked} ${disabled}>
+          <span>${escapeHtml(col.label)}</span>${note}
         </label>
       `;
     }).join('');
