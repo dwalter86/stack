@@ -91,7 +91,7 @@
         </button>
       </div>
       <div class="card-body" hidden>
-        <p class="small">Configure a status field and exact values to display red/yellow/green counts on the account sections list.</p>
+        <p class="small">Configure a status field and exact values to display red/yellow/green/blue counts on the account sections list.</p>
         <form id="statusSummaryForm" class="stacked-list" style="margin-top:12px;">
           <label for="statusSummaryFieldKey">
             Status field key
@@ -109,6 +109,10 @@
             Green values (comma-separated)
             <input id="statusSummaryGreenValues" type="text" placeholder="done, complete">
           </label>
+          <label for="statusSummaryBlueValues">
+            Blue values (comma-separated)
+            <input id="statusSummaryBlueValues" type="text" placeholder="on hold, scheduled">
+          </label>
           <label for="statusSummaryRedLabel">
             Red label (optional)
             <input id="statusSummaryRedLabel" type="text" placeholder="Leave empty to show count only">
@@ -120,6 +124,10 @@
           <label for="statusSummaryGreenLabel">
             Green label (optional)
             <input id="statusSummaryGreenLabel" type="text" placeholder="Leave empty to show count only">
+          </label>
+          <label for="statusSummaryBlueLabel">
+            Blue label (optional)
+            <input id="statusSummaryBlueLabel" type="text" placeholder="Leave empty to show count only">
           </label>
           <div class="actions" style="justify-content:flex-start;">
             <button class="btn" type="submit">Save</button>

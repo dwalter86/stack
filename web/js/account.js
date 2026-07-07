@@ -46,16 +46,19 @@ function parseStatusSummaryConfig(raw) {
   const red = normalizeValues(raw.red_values);
   const yellow = normalizeValues(raw.yellow_values);
   const green = normalizeValues(raw.green_values);
-  if (!red.size && !yellow.size && !green.size) return null;
+  const blue = normalizeValues(raw.blue_values);
+  if (!red.size && !yellow.size && !green.size && !blue.size) return null;
 
   return {
     fieldKey,
     red,
     yellow,
     green,
+    blue,
     redLabel: String(raw.red_label || '').trim(),
     yellowLabel: String(raw.yellow_label || '').trim(),
     greenLabel: String(raw.green_label || '').trim(),
+    blueLabel: String(raw.blue_label || '').trim(),
   };
 }
 
@@ -64,7 +67,7 @@ function normalizeStatusValue(val) {
 }
 
 function computeStatusCounts(items, config) {
-  const counts = { red: 0, yellow: 0, green: 0 };
+  const counts = { red: 0, yellow: 0, green: 0, blue: 0 };
   for (const item of items || []) {
     const value = normalizeStatusValue(item?.data?.[config.fieldKey]);
     if (!value) continue;
@@ -74,6 +77,8 @@ function computeStatusCounts(items, config) {
       counts.yellow += 1;
     } else if (config.green.has(value)) {
       counts.green += 1;
+    } else if (config.blue.has(value)) {
+      counts.blue += 1;
     }
   }
   return counts;
@@ -295,6 +300,7 @@ function renderStatusText(label, count) {
           <span class="status-pill status-pill-red">${renderStatusText(config.redLabel, counts.red)}</span>
           <span class="status-pill status-pill-yellow">${renderStatusText(config.yellowLabel, counts.yellow)}</span>
           <span class="status-pill status-pill-green">${renderStatusText(config.greenLabel, counts.green)}</span>
+          <span class="status-pill status-pill-blue">${renderStatusText(config.blueLabel, counts.blue)}</span>
         `;
         summaryEl.classList.remove('hidden');
       } catch {

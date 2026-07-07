@@ -361,6 +361,12 @@ label {
   border: 1px solid #bbf7d0;
 }
 
+.status-pill-blue {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
 #itemsTableContainer tr.item-row-status-red td {
   background: #fff1f2;
 }
@@ -371,6 +377,10 @@ label {
 
 #itemsTableContainer tr.item-row-status-green td {
   background: #f0fdf4;
+}
+
+#itemsTableContainer tr.item-row-status-blue td {
+  background: #eff6ff;
 }
 
 pre {

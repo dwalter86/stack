@@ -23,9 +23,10 @@ function parseStatusSummaryConfig(raw) {
   const red = normalizeValues(raw.red_values);
   const yellow = normalizeValues(raw.yellow_values);
   const green = normalizeValues(raw.green_values);
-  if (!red.size && !yellow.size && !green.size) return null;
+  const blue = normalizeValues(raw.blue_values);
+  if (!red.size && !yellow.size && !green.size && !blue.size) return null;
 
-  return { fieldKey, red, yellow, green };
+  return { fieldKey, red, yellow, green, blue };
 }
 
 function getItemStatusClass(item, config) {
@@ -35,6 +36,7 @@ function getItemStatusClass(item, config) {
   if (config.red.has(value)) return 'item-row-status-red';
   if (config.yellow.has(value)) return 'item-row-status-yellow';
   if (config.green.has(value)) return 'item-row-status-green';
+  if (config.blue.has(value)) return 'item-row-status-blue';
   return '';
 }
 

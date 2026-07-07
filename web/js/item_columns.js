@@ -89,24 +89,29 @@ function parseStatusSummary(raw) {
       redValues: [],
       yellowValues: [],
       greenValues: [],
+      blueValues: [],
       redLabel: '',
       yellowLabel: '',
       greenLabel: '',
+      blueLabel: '',
     };
   }
   const fieldKey = String(raw.field_key || '').trim();
   const redValues = Array.isArray(raw.red_values) ? raw.red_values.map(v => String(v).trim()).filter(Boolean) : [];
   const yellowValues = Array.isArray(raw.yellow_values) ? raw.yellow_values.map(v => String(v).trim()).filter(Boolean) : [];
   const greenValues = Array.isArray(raw.green_values) ? raw.green_values.map(v => String(v).trim()).filter(Boolean) : [];
+  const blueValues = Array.isArray(raw.blue_values) ? raw.blue_values.map(v => String(v).trim()).filter(Boolean) : [];
   return {
     enabled: Boolean(raw.enabled && fieldKey),
     fieldKey,
     redValues,
     yellowValues,
     greenValues,
+    blueValues,
     redLabel: String(raw.red_label || '').trim(),
     yellowLabel: String(raw.yellow_label || '').trim(),
     greenLabel: String(raw.green_label || '').trim(),
+    blueLabel: String(raw.blue_label || '').trim(),
   };
 }
 
@@ -281,9 +286,11 @@ function reconcileVisibility(columns, stored) {
   const statusSummaryRedValues = document.getElementById('statusSummaryRedValues');
   const statusSummaryYellowValues = document.getElementById('statusSummaryYellowValues');
   const statusSummaryGreenValues = document.getElementById('statusSummaryGreenValues');
+  const statusSummaryBlueValues = document.getElementById('statusSummaryBlueValues');
   const statusSummaryRedLabel = document.getElementById('statusSummaryRedLabel');
   const statusSummaryYellowLabel = document.getElementById('statusSummaryYellowLabel');
   const statusSummaryGreenLabel = document.getElementById('statusSummaryGreenLabel');
+  const statusSummaryBlueLabel = document.getElementById('statusSummaryBlueLabel');
   const statusSummaryMessage = document.getElementById('statusSummaryMessage');
   const isReadOnly = me.user_type === 'standard';
 
@@ -360,6 +367,9 @@ function reconcileVisibility(columns, stored) {
   if (statusSummaryGreenValues) {
     statusSummaryGreenValues.value = csvFromValues(initialStatusSummary.greenValues);
   }
+  if (statusSummaryBlueValues) {
+    statusSummaryBlueValues.value = csvFromValues(initialStatusSummary.blueValues);
+  }
   if (statusSummaryRedLabel) {
     statusSummaryRedLabel.value = initialStatusSummary.redLabel;
   }
@@ -368,6 +378,9 @@ function reconcileVisibility(columns, stored) {
   }
   if (statusSummaryGreenLabel) {
     statusSummaryGreenLabel.value = initialStatusSummary.greenLabel;
+  }
+  if (statusSummaryBlueLabel) {
+    statusSummaryBlueLabel.value = initialStatusSummary.blueLabel;
   }
 
   title.textContent = `${labels.items_label} columns`;
@@ -520,10 +533,12 @@ function reconcileVisibility(columns, stored) {
       const redValues = parseCsvValues(statusSummaryRedValues ? statusSummaryRedValues.value : '');
       const yellowValues = parseCsvValues(statusSummaryYellowValues ? statusSummaryYellowValues.value : '');
       const greenValues = parseCsvValues(statusSummaryGreenValues ? statusSummaryGreenValues.value : '');
-      const hasAnyValues = redValues.length || yellowValues.length || greenValues.length;
+      const blueValues = parseCsvValues(statusSummaryBlueValues ? statusSummaryBlueValues.value : '');
+      const hasAnyValues = redValues.length || yellowValues.length || greenValues.length || blueValues.length;
       const redLabel = statusSummaryRedLabel ? statusSummaryRedLabel.value.trim() : '';
       const yellowLabel = statusSummaryYellowLabel ? statusSummaryYellowLabel.value.trim() : '';
       const greenLabel = statusSummaryGreenLabel ? statusSummaryGreenLabel.value.trim() : '';
+      const blueLabel = statusSummaryBlueLabel ? statusSummaryBlueLabel.value.trim() : '';
 
       if (hasAnyValues && !fieldKey) {
         if (statusSummaryMessage) {
@@ -538,9 +553,11 @@ function reconcileVisibility(columns, stored) {
         red_values: redValues,
         yellow_values: yellowValues,
         green_values: greenValues,
+        blue_values: blueValues,
         red_label: redLabel,
         yellow_label: yellowLabel,
         green_label: greenLabel,
+        blue_label: blueLabel,
       };
 
       try {

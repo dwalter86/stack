@@ -89,9 +89,11 @@ def normalize_section_schema(raw: dict | None) -> dict:
         "red_values": [],
         "yellow_values": [],
         "green_values": [],
+        "blue_values": [],
         "red_label": "",
         "yellow_label": "",
         "green_label": "",
+        "blue_label": "",
       }
     field_key = str(val.get("field_key") or "").strip()
 
@@ -115,16 +117,19 @@ def normalize_section_schema(raw: dict | None) -> dict:
     red_values = clean_values("red_values")
     yellow_values = clean_values("yellow_values")
     green_values = clean_values("green_values")
-    enabled = bool(val.get("enabled")) and bool(field_key) and bool(red_values or yellow_values or green_values)
+    blue_values = clean_values("blue_values")
+    enabled = bool(val.get("enabled")) and bool(field_key) and bool(red_values or yellow_values or green_values or blue_values)
     return {
       "enabled": enabled,
       "field_key": field_key,
       "red_values": red_values,
       "yellow_values": yellow_values,
       "green_values": green_values,
+      "blue_values": blue_values,
       "red_label": str(val.get("red_label") or "").strip(),
       "yellow_label": str(val.get("yellow_label") or "").strip(),
       "green_label": str(val.get("green_label") or "").strip(),
+      "blue_label": str(val.get("blue_label") or "").strip(),
     }
 
   if not isinstance(raw, dict):
