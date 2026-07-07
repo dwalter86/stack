@@ -1055,3 +1055,61 @@ pre {
 .account-check input[type="checkbox"] { width: auto !important; margin: 0; }
 
 .form-card { width: 100%; max-width: 560px; padding: 16px; }
+
+/* Password field: reveal toggle + colour-coded characters when revealed */
+.password-wrap {
+  position: relative;
+  display: block;
+}
+.password-wrap input {
+  padding-right: 42px;
+}
+.password-wrap input.password-revealed {
+  color: transparent;
+  caret-color: var(--fg);
+}
+.password-wrap input.password-revealed::placeholder {
+  color: var(--muted);
+}
+
+.password-overlay {
+  position: absolute;
+  inset: 1px 42px 1px 1px;
+  display: none;
+  align-items: center;
+  white-space: pre;
+  overflow: hidden;
+  pointer-events: none;
+}
+.password-wrap input.password-revealed ~ .password-overlay {
+  display: flex;
+}
+.password-overlay .char-letter { color: var(--fg); }
+.password-overlay .char-digit  { color: #d33; }
+.password-overlay .char-symbol { color: #3b82c4; }
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 6px;
+}
+.password-toggle:hover { color: var(--fg); background: var(--bg); }
+
+.login-box {
+  max-width: 33.333%;
+  margin: 0 auto;
+}
+@media (max-width: 700px) {
+  .login-box { max-width: 100%; }
+}
