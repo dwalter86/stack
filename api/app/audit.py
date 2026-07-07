@@ -20,6 +20,20 @@ MAX_BODY_CHARS = 10_000
 REDACTED = "[redacted]"
 SENSITIVE_KEY_RE = re.compile(r"password|secret|token", re.IGNORECASE)
 
+# Read-only usage worth recording. GETs not matching these are not logged
+# (login/session chatter like /api/me would be pure noise). First match wins.
+VIEW_RULES = [
+  (r"^/api/accounts/[^/]+/sections/[^/]+/items", "section.view"),
+  (r"^/api/accounts/[^/]+/items/[^/]+/comments$", "comments.view"),
+  (r"^/api/accounts/[^/]+/items/[^/]+$",          "item.view"),
+  (r"^/api/accounts/[^/]+/items$",                "section.view"),
+  (r"^/api/accounts/[^/]+/sections/[^/]+/notes$", "notes.view"),
+  (r"^/api/accounts/[^/]+/sections$",             "account.view"),
+  (r"^/api/accounts/[^/]+/template/file$",        "template.download"),
+  (r"^/api/accounts/[^/]+/template/starter$",     "template.download"),
+  (r"^/api/me/accounts$",                         "home.view"),
+]
+
 # (method, path regex) -> action name. First match wins.
 ACTION_RULES = [
   ("POST",   r"^/api/login$",                                    "login"),
@@ -49,12 +63,21 @@ UUID_RE = re.compile(r"^[0-9a-f-]{36}$")
 
 
 def derive_action(method: str, path: str, status: int) -> str:
+  if method == "GET":
+    return derive_view_action(path) or "api.read"
   for m, pattern, action in ACTION_RULES:
     if m == method and re.match(pattern, path):
       if action == "login":
         return "login.success" if status < 400 else "login.failed"
       return action
   return f"api.write ({method})"
+
+
+def derive_view_action(path: str) -> str | None:
+  for pattern, action in VIEW_RULES:
+    if re.match(pattern, path):
+      return action
+  return None
 
 
 def redact(value):
@@ -154,7 +177,9 @@ class AuditMiddleware:
 
     method = scope.get("method", "")
     path = scope.get("path", "")
-    if method in ("GET", "HEAD", "OPTIONS") or not path.startswith("/api"):
+    if method in ("HEAD", "OPTIONS") or not path.startswith("/api"):
+      return await self.app(scope, receive, send)
+    if method == "GET" and not derive_view_action(path):
       return await self.app(scope, receive, send)
 
     body_chunks: list[bytes] = []

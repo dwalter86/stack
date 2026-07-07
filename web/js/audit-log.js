@@ -101,6 +101,7 @@ const PAGE_SIZE = 50;
   }
 
   document.getElementById('applyFilters').addEventListener('click', () => { offset = 0; load(); });
+  document.getElementById('refreshBtn').addEventListener('click', () => { offset = 0; load(); });
   document.getElementById('clearFilters').addEventListener('click', () => {
     ['filterUser', 'filterFrom', 'filterTo', 'filterSearch'].forEach(id => { document.getElementById(id).value = ''; });
     actionSelect.value = '';

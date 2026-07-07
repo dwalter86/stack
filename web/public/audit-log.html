@@ -7,7 +7,6 @@
   <main class="page-container" data-disable-auto-update="true">
     <p><a href="/settings.html" class="btn btnBack">Back</a></p>
     <h1>Audit log</h1>
-    <p class="small">Every change and login attempt across the platform. Visible to super admins only.</p>
 
     <div class="card audit-filters">
       <input type="text" id="filterUser" placeholder="User email">
@@ -17,6 +16,7 @@
       <input type="text" id="filterSearch" placeholder="Search details...">
       <button class="btn" id="applyFilters">Apply</button>
       <button class="btn" id="clearFilters">Clear</button>
+      <button class="btn" id="refreshBtn" title="Reload the latest entries">Refresh</button>
     </div>
 
     <div id="auditMeta" class="small"></div>
