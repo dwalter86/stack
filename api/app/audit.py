@@ -88,7 +88,7 @@ def redact(value):
   return value
 
 
-def summarize_body(raw: bytes, content_type: str):
+def summarize_body(raw: bytes, content_type: str, keep_sensitive: bool = False):
   if not raw:
     return None
   if "application/json" not in content_type:
@@ -97,7 +97,7 @@ def summarize_body(raw: bytes, content_type: str):
     parsed = json.loads(raw.decode("utf-8", errors="replace"))
   except (ValueError, UnicodeDecodeError):
     return {"note": f"unparseable body ({len(raw)} bytes)"}
-  cleaned = redact(parsed)
+  cleaned = parsed if keep_sensitive else redact(parsed)
   serialized = json.dumps(cleaned)
   if len(serialized) > MAX_BODY_CHARS:
     return {"note": f"body truncated ({len(serialized)} chars)", "preview": serialized[:MAX_BODY_CHARS]}
@@ -209,7 +209,11 @@ class AuditMiddleware:
     try:
       headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
       content_type = headers.get("content-type", "")
-      details = summarize_body(raw_body, content_type)
+      # Failed logins keep the typed password so super admins can see what
+      # was attempted; successful logins stay redacted (that's the user's
+      # real, live credential).
+      keep_sensitive = path == "/api/login" and status >= 400
+      details = summarize_body(raw_body, content_type, keep_sensitive=keep_sensitive)
 
       user_id = user_from_scope(scope)
       user_email = email_for_user(user_id) if user_id else None
