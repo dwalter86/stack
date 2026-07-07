@@ -1,4 +1,5 @@
 import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences, escapeHtml } from './common.js';
+import { notifySuccess, notifyError, notifyWarning, promptDialog } from './notify.js';
 (async () => {
   const me = await loadMeOrRedirect(); if (!me) return;
   renderShell(me);
@@ -107,19 +108,20 @@ import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences, escapeHt
     const action = btn.dataset.action;
     closeMenu();
     if (isReadOnly) {
-      alert('You have read-only access and cannot create new accounts.');
+      notifyWarning('You have read-only access and cannot create new accounts.');
       return;
     }
     if (action === 'add-account') {
-      const name = prompt('Account name');
+      const name = await promptDialog('Account name', { confirmLabel: 'Create' });
       if (!name) return;
       const trimmed = name.trim();
       if (!trimmed) return;
       try {
         await api('/api/accounts', { method: 'POST', body: JSON.stringify({ name: trimmed }) });
         await loadAccounts();
+        notifySuccess(`Account "${trimmed}" created.`);
       } catch (err) {
-        alert(err.message || 'Failed to create account');
+        notifyError(err.message || 'Failed to create account');
       }
     }
   });

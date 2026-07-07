@@ -1,4 +1,5 @@
 import { loadMeOrRedirect, renderShell, api, escapeHtml } from './common.js';
+import { notifySuccess, notifyError } from './notify.js';
 document.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
     const accountId = params.get('account_id');
@@ -73,9 +74,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             commentForm.reset();
             loadComments(); // Refresh comments list
+            notifySuccess('Comment posted.');
         } catch (error) {
             console.error('Error posting comment:', error);
-            alert('There was an error posting your comment.');
+            notifyError('There was an error posting your comment.');
         }
     };
 

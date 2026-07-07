@@ -1,4 +1,5 @@
 import { loadMeOrRedirect, renderShell, api, escapeHtml, getToken } from './common.js';
+import { notifySuccess, notifyError, confirmDialog } from './notify.js';
 
 function qs(name) {
   const m = new URLSearchParams(location.search).get(name);
@@ -90,7 +91,7 @@ async function downloadFile(path, suggestedName) {
       downloadLink.addEventListener('click', (e) => {
         e.preventDefault();
         downloadFile(`/api/accounts/${accountId}/template/file`, info.filename || 'template.docx')
-          .catch((err) => { alert(err.message || 'Download failed'); });
+          .catch((err) => { notifyError(err.message || 'Download failed'); });
       });
     }
     showElement(templateUploadBtn, false);
@@ -134,7 +135,7 @@ async function downloadFile(path, suggestedName) {
       try {
         await downloadFile(`/api/accounts/${accountId}/template/starter`, 'starter_template.docx');
       } catch (err) {
-        alert(err.message || 'Failed to download starter template');
+        notifyError(err.message || 'Failed to download starter template');
       }
     });
   }
@@ -158,6 +159,7 @@ async function downloadFile(path, suggestedName) {
         try {
           const info = await uploadTemplateFile(file);
           renderTemplateInfo(info);
+          notifySuccess('Template uploaded.');
         } catch (err) {
           templateStatus.textContent = `Upload failed: ${err.message || err}`;
         } finally {
@@ -167,11 +169,15 @@ async function downloadFile(path, suggestedName) {
     }
     if (templateDeleteBtn) {
       templateDeleteBtn.addEventListener('click', async () => {
-        if (!confirm('Remove the export template for this account?')) return;
+        const ok = await confirmDialog('Remove the export template for this account?', {
+          title: 'Remove template', confirmLabel: 'Remove',
+        });
+        if (!ok) return;
         templateStatus.textContent = 'Removing...';
         try {
           await api(`/api/accounts/${accountId}/template`, { method: 'DELETE' });
           renderTemplateInfo(null);
+          notifySuccess('Export template removed.');
         } catch (err) {
           templateStatus.textContent = `Failed to remove: ${err.message || err}`;
         }

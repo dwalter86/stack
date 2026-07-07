@@ -1,4 +1,5 @@
 import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences, escapeHtml } from './common.js';
+import { notifySuccess, notifyError, notifyWarning, confirmDialog, promptDialog } from './notify.js';
 
 function qs(name) {
   const m = new URLSearchParams(location.search).get(name);
@@ -377,7 +378,7 @@ function renderStatusText(label, count) {
     closeMenu();
 
     if (isReadOnly && (action === 'add-section' || action === 'edit' || action === 'delete')) {
-      alert('You have read-only access and cannot modify this account or its sections.');
+      notifyWarning('You have read-only access and cannot modify this account or its sections.');
       return;
     }
 
@@ -386,7 +387,7 @@ function renderStatusText(label, count) {
     } else if (action === 'template-settings') {
       window.location.href = `/account-template.html?id=${encodeURIComponent(accountId)}`;
     } else if (action === 'edit') {
-      const next = prompt('Account name', accountName);
+      const next = await promptDialog('Account name', { value: accountName, confirmLabel: 'Rename' });
       if (!next) return;
       const trimmed = next.trim();
       if (!trimmed || trimmed === accountName) return;
@@ -397,18 +398,20 @@ function renderStatusText(label, count) {
         });
         accountName = updated.name;
         acctNameEl.textContent = updated.name;
+        notifySuccess('Account renamed.');
       } catch (err) {
-        alert(err.message || 'Failed to update account');
+        notifyError(err.message || 'Failed to update account');
       }
     } else if (action === 'delete') {
-      if (!confirm('Delete this account and all its data? This cannot be undone.')) {
-        return;
-      }
+      const ok = await confirmDialog('Delete this account and all its data? This cannot be undone.', {
+        title: 'Delete account', confirmLabel: 'Delete',
+      });
+      if (!ok) return;
       try {
         await api(`/api/accounts/${accountId}`, { method: 'DELETE' });
         window.location.replace('/accounts.html');
       } catch (err) {
-        alert(err.message || 'Failed to delete account');
+        notifyError(err.message || 'Failed to delete account');
       }
     }
   });

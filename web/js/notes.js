@@ -1,4 +1,5 @@
 import { loadMeOrRedirect, renderShell, api, escapeHtml } from './common.js';
+import { notifySuccess, notifyError } from './notify.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(window.location.search);
@@ -76,9 +77,10 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       noteForm.reset();
       await loadNotes();
+      notifySuccess('Note added.');
     } catch (error) {
       console.error('Error saving note:', error);
-      alert('There was an error saving your note.');
+      notifyError('There was an error saving your note.');
     }
   };
 

@@ -1,4 +1,5 @@
 import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences, escapeHtml, getToken } from './common.js';
+import { notifySuccess, notifyError, notifyWarning, confirmDialog } from './notify.js';
 
 function qs(name) {
   const m = new URLSearchParams(location.search).get(name);
@@ -718,7 +719,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
   function openExportModal() {
     if (!exportModal) return;
     if (!itemsData.length) {
-      alert(`No ${labels.items_label.toLowerCase()} to export.`);
+      notifyWarning(`No ${labels.items_label.toLowerCase()} to export.`);
       return;
     }
     const exportItems = getItemsForExport();
@@ -1079,7 +1080,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
   function exportItemsXlsx() {
     const exportItems = getItemsForExport();
     if (!exportItems.length) {
-      alert(`No ${labels.items_label.toLowerCase()} to export.`);
+      notifyWarning(`No ${labels.items_label.toLowerCase()} to export.`);
       return;
     }
 
@@ -1326,7 +1327,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
           renderItemsTable(itemSearch ? itemSearch.value : '');
         } catch (err) {
           select.value = prev;
-          alert(err.message || 'Failed to update value');
+          notifyError(err.message || 'Failed to update value');
         } finally {
           select.disabled = false;
         }
@@ -1339,7 +1340,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
         const itemId = btn.getAttribute('data-item-id');
         if (!itemId) return;
         if (isReadOnly) {
-          alert('You have read-only access and cannot delete items.');
+          notifyWarning('You have read-only access and cannot delete items.');
           return;
         }
         const matchedItem = itemsData.find(item => item.id === itemId);
@@ -1350,7 +1351,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
           : labelSource;
         const fallbackTarget = `this ${singularLabel.toLowerCase() || 'item'}`;
         const promptTarget = itemName ? `"${itemName}"` : fallbackTarget;
-        const shouldDelete = confirm(`Delete ${promptTarget}? This cannot be undone.`);
+        const shouldDelete = await confirmDialog(`Delete ${promptTarget}? This cannot be undone.`, { title: 'Delete', confirmLabel: 'Delete' });
         if (!shouldDelete) {
           return;
         }
@@ -1362,8 +1363,9 @@ function saveItemZoom(accountId, slug, zoomPercent) {
           itemsData = itemsData.filter(item => item.id !== itemId);
           selectedItemIds.delete(itemId);
           renderItemsTable(itemSearch ? itemSearch.value : '');
+          notifySuccess(`${promptTarget.replace(/"/g, '')} deleted.`);
         } catch (err) {
-          alert(err.message || 'Failed to delete item');
+          notifyError(err.message || 'Failed to delete item');
           btn.disabled = false;
           btn.textContent = previousText;
         }
@@ -1506,6 +1508,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
       itemMsg.textContent = 'Item added.';
       closeItemModal();
       await loadItems();
+      notifySuccess(`${name} added.`);
     } catch (err) {
       itemMsg.textContent = err.message || 'Failed to add item';
     }
@@ -1519,7 +1522,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     closeMenu();
 
     if (isReadOnly && (action === 'add-item' || action === 'edit' || action === 'delete' || action === 'settings')) {
-      alert('You have read-only access and cannot modify this section.');
+      notifyWarning('You have read-only access and cannot modify this section.');
       return;
     }
 
@@ -1530,14 +1533,14 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     } else if (action === 'edit') {
       openEditSectionModal();
     } else if (action === 'delete') {
-      if (!confirm('Delete this section and all its items? This cannot be undone.')) {
+      if (!(await confirmDialog('Delete this section and all its items? This cannot be undone.', { title: 'Delete section', confirmLabel: 'Delete' }))) {
         return;
       }
       try {
         await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`, { method: 'DELETE' });
         window.location.replace(`/account.html?id=${encodeURIComponent(accountId)}`);
       } catch (err) {
-        alert(err.message || 'Failed to delete section');
+        notifyError(err.message || 'Failed to delete section');
       }
     } else if (action === 'save-sort') {
       saveSortPref(accountId, slug, sortState);

@@ -1,4 +1,5 @@
 import { loadMeOrRedirect, renderShell, api, DEFAULT_PREFERENCES, escapeHtml } from './common.js';
+import { notifySuccess, notifyError, confirmDialog } from './notify.js';
 
 const TYPE_LABELS = {
   super_admin: 'Super admin',
@@ -179,12 +180,16 @@ const TYPE_LABELS = {
     if (action === 'edit') {
       openEditModal(user);
     } else if (action === 'delete') {
-      if (confirm('Are you sure you want to delete this user? This cannot be undone.')) {
+      const ok = await confirmDialog('Are you sure you want to delete this user? This cannot be undone.', {
+        title: 'Delete user', confirmLabel: 'Delete',
+      });
+      if (ok) {
         try {
           await api(`/api/admin/users/${userId}`, { method: 'DELETE' });
           document.getElementById(`user-card-${userId}`)?.remove();
+          notifySuccess('User deleted.');
         } catch (err) {
-          alert(`Failed to delete user: ${err.message}`);
+          notifyError(`Failed to delete user: ${err.message}`);
         }
       }
     }

@@ -811,3 +811,110 @@ pre {
 .image-modal-close:hover {
   background: rgba(0, 0, 0, 0.8);
 }
+/* Toast notifications */
+#toast-container {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--muted);
+  border-radius: 6px;
+  padding: 10px 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  transform: translateX(24px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.toast-show { opacity: 1; transform: translateX(0); }
+.toast-hide { opacity: 0; transform: translateX(24px); }
+
+.toast-success { border-left-color: #2e9e44; }
+.toast-error   { border-left-color: #d33; }
+.toast-warning { border-left-color: #e6a700; }
+.toast-info    { border-left-color: #3b82c4; }
+
+.toast-message { flex: 1; word-break: break-word; }
+
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.toast-close:hover { color: var(--fg); }
+
+/* Confirm dialog */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.confirm-dialog {
+  background: var(--card);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  padding: 20px;
+  max-width: 420px;
+  width: 100%;
+}
+
+.confirm-dialog h3 { margin: 0 0 8px; }
+.confirm-dialog p { margin: 0 0 16px; color: var(--fg); white-space: pre-line; }
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-danger {
+  background: #d33;
+  border-color: #d33;
+  color: #fff;
+}
+.confirm-danger:hover { background: #b52a2a; }
+
+.confirm-ok {
+  background: #3b82c4;
+  border-color: #3b82c4;
+  color: #fff;
+}
+.confirm-ok:hover { background: #326ea6; }
+
+.prompt-input {
+  width: 100%;
+  font: inherit;
+  padding: 8px 10px;
+  margin: 0 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.prompt-input:focus { outline: 2px solid #3b82c4; border-color: #3b82c4; }
+
+.input-error {
+  border-color: #d33 !important;
+  outline-color: #d33;
+}
+.input-error:focus { outline: 2px solid #d33; }

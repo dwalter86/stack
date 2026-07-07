@@ -1,4 +1,5 @@
 import { loadMeOrRedirect, renderShell, api, getLabels, escapeHtml, getToken } from './common.js';
+import { notifySuccess, notifyError, notifyWarning } from './notify.js';
 
 function qs(name) {
   const m = new URLSearchParams(location.search).get(name);
@@ -288,7 +289,7 @@ function formatDateTime(val) {
         link.remove();
       }, 0);
     } catch (err) {
-      alert(`Export failed: ${err.message || err}`);
+      notifyError(`Export failed: ${err.message || err}`);
     } finally {
       exportItemBtn.disabled = false;
       exportItemBtn.textContent = originalLabel;
@@ -427,7 +428,7 @@ function formatDateTime(val) {
 
   function enterEditMode() {
     if (isReadOnly) {
-      alert('You have read-only access and cannot edit items.');
+      notifyWarning('You have read-only access and cannot edit items.');
       return;
     }
     if (!currentItem || !currentRows.length || isEditing) return;
@@ -502,7 +503,7 @@ function formatDateTime(val) {
 
   async function saveEdits() {
     if (isReadOnly) {
-      alert('You have read-only access and cannot edit items.');
+      notifyWarning('You have read-only access and cannot edit items.');
       return;
     }
     if (!currentItem || !currentRows.length) return;
@@ -511,7 +512,7 @@ function formatDateTime(val) {
     const newNameRaw = nameInput ? nameInput.value : currentItem.name;
     const newName = (newNameRaw || '').trim();
     if (!newName) {
-      alert('Item name cannot be empty.');
+      notifyWarning('Item name cannot be empty.');
       return;
     }
 
@@ -558,8 +559,9 @@ function formatDateTime(val) {
       const createdCopy = updated.created_at ? ` · Added ${formatDateTime(updated.created_at)}` : '';
       itemMetaEl.textContent = `${accountName} · ${labels.sections_label}: ${sectionLabel} · id: ${itemId}${createdCopy}`;
       document.title = `${updated.name} | ${labels.items_label}`;
+      notifySuccess('Item saved.');
     } catch (e) {
-      alert(e.message || 'Failed to save item.');
+      notifyError(e.message || 'Failed to save item.');
     }
   }
 

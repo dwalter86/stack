@@ -74,9 +74,9 @@ export function renderShell(user) {
           <span class="logo-text">ILG Forms</span>
         </a>
         <div class="menu" style="margin-left:auto;">
-          <span class="pill small">${escapeHtml(user?.email) || ''}</span>
+          ${user ? `<span class="pill small">${escapeHtml(user.email) || ''}</span>` : ''}
           ${user?.is_admin ? '<a href="/settings.html" class="btn">Settings</a>' : ''}
-          <a href="#" id="logoutBtn" class="btn">Logout</a>
+          ${user ? '<a href="#" id="logoutBtn" class="btn">Logout</a>' : ''}
         </div>
       </div>`;
     const btn = document.getElementById('logoutBtn'); if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); logout(); });
