@@ -332,6 +332,13 @@ function reconcileVisibility(columns, stored) {
       schemaFields = apiFields;
     }
     sectionLabel = section.label || slug;
+    const back = document.getElementById('backToSection');
+    if (back) {
+      back.textContent = `Back to ${sectionLabel}`;
+      back.title = `Back to ${sectionLabel}`;
+    }
+    const pageEyebrow = document.getElementById('pageEyebrow');
+    if (pageEyebrow) pageEyebrow.textContent = sectionLabel;
     apiTemplate = fieldsToTemplate(slug, apiFields);
   } catch {
     if (!schemaFields.length) {
@@ -364,7 +371,7 @@ function reconcileVisibility(columns, stored) {
   }
 
   title.textContent = `${labels.items_label} columns`;
-  settingsMeta.textContent = `${accountName} · ${labels.sections_label}: ${sectionLabel}`;
+  settingsMeta.textContent = accountName;
 
   let items = [];
   try {

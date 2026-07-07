@@ -12,7 +12,7 @@ const TYPE_LABELS = {
   renderShell(me);
   if (!me.is_admin) { window.location.replace('/accounts.html'); return; }
 
-  // Modal elements
+  // Edit modal elements
   const editModal = document.getElementById('editUserModal');
   const editForm = document.getElementById('editUserForm');
   const editMsg = document.getElementById('editUserMsg');
@@ -26,37 +26,102 @@ const TYPE_LABELS = {
   const editAccountsSection = document.getElementById('editUserAccountsSection');
   const editAccountsGrid = document.getElementById('editUserAccountsGrid');
   const editSelectAll = document.getElementById('editUserSelectAll');
+  const editAccountSearch = document.getElementById('editUserAccountSearch');
+
+  // Add modal elements
+  const addModal = document.getElementById('addUserModal');
+  const addForm = document.getElementById('addUserForm');
+  const addMsg = document.getElementById('addUserMsg');
+  const addUserName = document.getElementById('addUserName');
+  const addUserEmail = document.getElementById('addUserEmail');
+  const addUserPassword = document.getElementById('addUserPassword');
+  const addUserType = document.getElementById('addUserType');
+  const addCancelBtn = document.getElementById('addUserCancel');
+  const addAccountsGrid = document.getElementById('addUserAccountsGrid');
+  const addSelectAll = document.getElementById('addUserSelectAll');
+  const addAccountSearch = document.getElementById('addUserAccountSearch');
 
   const isSuperAdmin = me.user_type === 'super_admin';
-  let allUsers = []; // Cache for users
+  let allUsers = [];
   let allAccounts = [];
 
   const list = document.getElementById('userList');
   const emptyState = document.getElementById('usersEmptyState');
   const showPreferences = isSuperAdmin;
 
-  if (isSuperAdmin && editAccountsSection) {
-    try {
-      allAccounts = await api('/api/admin/all-accounts');
-      editAccountsGrid.innerHTML = allAccounts.map(a => `
-        <label class="card account-card" style="display:flex;justify-content:space-between;align-items:center;">
-          <div><strong>${escapeHtml(a.name)}</strong><div class="small"><code>${escapeHtml(a.id)}</code></div></div>
-          <input type="checkbox" value="${escapeHtml(a.id)}">
-        </label>
-      `).join('');
-      editAccountsSection.classList.remove('hidden');
-    } catch (e) {
-      editAccountsGrid.innerHTML = `<p class="small">Failed to load accounts: ${escapeHtml(e.message)}</p>`;
-      editAccountsSection.classList.remove('hidden');
+  // Non-super admins can't create or promote to super admin
+  if (!isSuperAdmin) {
+    for (const select of [editUserType, addUserType]) {
+      const opt = select?.querySelector('option[value="super_admin"]');
+      if (opt) opt.disabled = true;
     }
   }
 
-  if (editSelectAll && editAccountsGrid) {
-    editSelectAll.addEventListener('change', () => {
-      editAccountsGrid.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-        cb.checked = editSelectAll.checked;
-      });
+  function renderChecklist(gridEl, accounts) {
+    gridEl.innerHTML = accounts.map(a => `
+      <label class="account-check" data-name="${escapeHtml(a.name.toLowerCase())}" title="${escapeHtml(a.id)}">
+        <input type="checkbox" value="${escapeHtml(a.id)}">
+        <span>${escapeHtml(a.name)}</span>
+      </label>
+    `).join('');
+  }
+
+  function setupChecklist(gridEl, selectAllEl, searchEl) {
+    const visibleBoxes = () => Array.from(gridEl.querySelectorAll('.account-check'))
+      .filter(row => !row.classList.contains('hidden'))
+      .map(row => row.querySelector('input[type="checkbox"]'));
+
+    const syncSelectAll = () => {
+      const boxes = visibleBoxes();
+      selectAllEl.checked = boxes.length > 0 && boxes.every(cb => cb.checked);
+    };
+
+    // Select all applies to the rows currently visible (i.e. matching the search).
+    selectAllEl.addEventListener('change', () => {
+      visibleBoxes().forEach(cb => { cb.checked = selectAllEl.checked; });
     });
+    gridEl.addEventListener('change', syncSelectAll);
+    searchEl.addEventListener('input', () => {
+      const term = searchEl.value.trim().toLowerCase();
+      gridEl.querySelectorAll('.account-check').forEach(row => {
+        row.classList.toggle('hidden', term && !row.dataset.name.includes(term));
+      });
+      syncSelectAll();
+    });
+
+    return {
+      reset(selectedIds = []) {
+        searchEl.value = '';
+        gridEl.querySelectorAll('.account-check').forEach(row => row.classList.remove('hidden'));
+        const selected = new Set(selectedIds);
+        gridEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+          cb.checked = selected.has(cb.value);
+        });
+        syncSelectAll();
+      },
+      checkedIds() {
+        return Array.from(gridEl.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+      },
+    };
+  }
+
+  let editChecklist = null;
+  let addChecklist = null;
+  try {
+    allAccounts = await api('/api/admin/all-accounts');
+    renderChecklist(addAccountsGrid, allAccounts);
+    addChecklist = setupChecklist(addAccountsGrid, addSelectAll, addAccountSearch);
+    if (isSuperAdmin && editAccountsSection) {
+      renderChecklist(editAccountsGrid, allAccounts);
+      editChecklist = setupChecklist(editAccountsGrid, editSelectAll, editAccountSearch);
+      editAccountsSection.classList.remove('hidden');
+    }
+  } catch (e) {
+    addAccountsGrid.innerHTML = `<p class="small">Failed to load accounts: ${escapeHtml(e.message)}</p>`;
+    if (isSuperAdmin && editAccountsGrid) {
+      editAccountsGrid.innerHTML = `<p class="small">Failed to load accounts: ${escapeHtml(e.message)}</p>`;
+      editAccountsSection.classList.remove('hidden');
+    }
   }
 
   function renderPrefs(user) {
@@ -81,49 +146,54 @@ const TYPE_LABELS = {
     return `<div class="small">Customised fields:<ul>${items}</ul></div>`;
   }
 
-  try {
-    const users = await api('/api/admin/users'); // Renamed to 'users'
-    allUsers = users; // Cache the user list
-    if (!users.length) {
-      list.innerHTML = '';
-      emptyState.classList.remove('hidden');
-      return;
-    }
-    emptyState.classList.add('hidden');
-    list.innerHTML = users.map(u => {
-      const typeLabel = TYPE_LABELS[u.user_type] || u.user_type;
-      const status = u.is_active ? 'Active' : 'Disabled';
-      const prefs = renderPrefs(u);
-      const name = u.name?.trim() || u.email;
-      const canEdit = me.user_type === 'super_admin' || u.user_type !== 'super_admin';
-      const canDelete = canEdit && me.id !== u.id;
+  async function loadUsers() {
+    try {
+      const users = await api('/api/admin/users');
+      allUsers = users;
+      if (!users.length) {
+        list.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+      emptyState.classList.add('hidden');
+      list.innerHTML = users.map(u => {
+        const typeLabel = TYPE_LABELS[u.user_type] || u.user_type;
+        const status = u.is_active ? 'Active' : 'Disabled';
+        const prefs = renderPrefs(u);
+        const name = u.name?.trim() || u.email;
+        const canEdit = me.user_type === 'super_admin' || u.user_type !== 'super_admin';
+        const canDelete = canEdit && me.id !== u.id;
 
-      const editButton = canEdit ? `<button class="btn" data-action="edit" data-id="${u.id}">Edit</button>` : '';
-      const deleteButton = canDelete ? `<button class="btn danger" data-action="delete" data-id="${u.id}">Delete</button>` : '';
-      return `
-        <div class="card account-card account-card-user" id="user-card-${u.id}">
-          <div style="display:flex;align-items:flex-start;gap:16px;">
-            <div style="min-width:0;">
-              <strong>${escapeHtml(name)}</strong>
-              <div class="small">${escapeHtml(u.email)}</div>
-              <div class="small">${escapeHtml(typeLabel)} • ${status}</div>
-            </div>
-            <div style="flex:1;min-width:0;text-align:left;">
-              ${prefs}
-            </div>
-            <div class="card-actions" style="white-space:nowrap;margin-left:auto;">
-              ${editButton}
-              ${deleteButton}
+        const editButton = canEdit ? `<button class="btn" data-action="edit" data-id="${u.id}">Edit</button>` : '';
+        const deleteButton = canDelete ? `<button class="btn danger" data-action="delete" data-id="${u.id}">Delete</button>` : '';
+        return `
+          <div class="card account-card account-card-user" id="user-card-${u.id}">
+            <div style="display:flex;align-items:flex-start;gap:16px;">
+              <div style="min-width:0;">
+                <strong>${escapeHtml(name)}</strong>
+                <div class="small">${escapeHtml(u.email)}</div>
+                <div class="small">${escapeHtml(typeLabel)} • ${status}</div>
+              </div>
+              <div style="flex:1;min-width:0;text-align:left;">
+                ${prefs}
+              </div>
+              <div class="card-actions" style="white-space:nowrap;margin-left:auto;">
+                ${editButton}
+                ${deleteButton}
+              </div>
             </div>
           </div>
-        </div>
-      `;
-    }).join('');
-  } catch (e) {
-    list.innerHTML = `<p class="small">Failed to load users: ${escapeHtml(e.message)}</p>`;
-    emptyState.classList.add('hidden');
+        `;
+      }).join('');
+    } catch (e) {
+      list.innerHTML = `<p class="small">Failed to load users: ${escapeHtml(e.message)}</p>`;
+      emptyState.classList.add('hidden');
+    }
   }
 
+  await loadUsers();
+
+  // ----- Edit modal -----
   function closeEditModal() {
     editModal.classList.add('hidden');
     editMsg.textContent = '';
@@ -136,36 +206,42 @@ const TYPE_LABELS = {
     editUserEmail.value = user.email;
     editUserType.value = user.user_type;
     editUserIsActive.checked = user.is_active;
-    editModalTitle.textContent = `Edit User: ${user.name || user.email}`;
-
-    if (isSuperAdmin && editAccountsGrid) {
-      const selected = new Set(user.accounts || []);
-      editAccountsGrid.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-        cb.checked = selected.has(cb.value);
-      });
-      if (editSelectAll) {
-        const boxes = editAccountsGrid.querySelectorAll('input[type="checkbox"]');
-        editSelectAll.checked = boxes.length > 0 && Array.from(boxes).every(cb => cb.checked);
-      }
-    }
-
-    // Super admins can't be demoted by regular admins
-    const typeSelect = document.getElementById('editUserType');
-    if (me.user_type !== 'super_admin') {
-      Array.from(typeSelect.options).forEach(opt => {
-        if (opt.value === 'super_admin') {
-          opt.disabled = true;
-        }
-      });
-    }
-
+    editModalTitle.textContent = `Edit user: ${user.name || user.email}`;
+    if (editChecklist) editChecklist.reset(user.accounts || []);
     editModal.classList.remove('hidden');
     editUserName.focus();
   }
 
-  if (editCancelBtn) {
-    editCancelBtn.addEventListener('click', closeEditModal);
+  if (editCancelBtn) editCancelBtn.addEventListener('click', closeEditModal);
+  editModal.addEventListener('click', (e) => { if (e.target === editModal) closeEditModal(); });
+
+  // ----- Add modal -----
+  function closeAddModal() {
+    addModal.classList.add('hidden');
+    addMsg.textContent = '';
   }
+
+  function openAddModal() {
+    addForm.reset();
+    addMsg.textContent = '';
+    addUserType.value = 'standard';
+    if (addChecklist) addChecklist.reset([]);
+    addModal.classList.remove('hidden');
+    addUserName.focus();
+  }
+
+  const addUserBtn = document.getElementById('addUserBtn');
+  const emptyAddUserBtn = document.getElementById('emptyAddUserBtn');
+  if (addUserBtn) addUserBtn.addEventListener('click', openAddModal);
+  if (emptyAddUserBtn) emptyAddUserBtn.addEventListener('click', openAddModal);
+  if (addCancelBtn) addCancelBtn.addEventListener('click', closeAddModal);
+  addModal.addEventListener('click', (e) => { if (e.target === addModal) closeAddModal(); });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!editModal.classList.contains('hidden')) closeEditModal();
+    if (!addModal.classList.contains('hidden')) closeAddModal();
+  });
 
   list.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-action]');
@@ -206,10 +282,8 @@ const TYPE_LABELS = {
         user_type: editUserType.value,
         is_active: editUserIsActive.checked,
       };
-      if (isSuperAdmin && editAccountsGrid) {
-        payload.accounts = Array.from(
-          editAccountsGrid.querySelectorAll('input[type="checkbox"]:checked')
-        ).map(cb => cb.value);
+      if (editChecklist) {
+        payload.accounts = editChecklist.checkedIds();
       }
 
       try {
@@ -218,13 +292,11 @@ const TYPE_LABELS = {
           body: JSON.stringify(payload),
         });
 
-        // Update user in the cache
         const userIndex = allUsers.findIndex(u => u.id === userId);
         if (userIndex !== -1) {
           allUsers[userIndex] = { ...allUsers[userIndex], ...updatedUser };
         }
 
-        // Re-render the specific user card
         const card = document.getElementById(`user-card-${userId}`);
         if (card) {
           const typeLabel = TYPE_LABELS[updatedUser.user_type] || updatedUser.user_type;
@@ -238,8 +310,35 @@ const TYPE_LABELS = {
         }
 
         closeEditModal();
+        notifySuccess('User updated.');
       } catch (err) {
         editMsg.textContent = `Error: ${err.message}`;
+      }
+    });
+  }
+
+  if (addForm) {
+    addForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      addMsg.textContent = 'Creating…';
+
+      const name = addUserName.value.trim();
+      if (!name) { addMsg.textContent = 'Name is required'; return; }
+      const payload = {
+        name,
+        email: addUserEmail.value.trim(),
+        password: addUserPassword.value,
+        user_type: addUserType.value,
+        accounts: addChecklist ? addChecklist.checkedIds() : [],
+      };
+
+      try {
+        await api('/api/admin/users', { method: 'POST', body: JSON.stringify(payload) });
+        closeAddModal();
+        notifySuccess(`User ${name} created.`);
+        await loadUsers();
+      } catch (err) {
+        addMsg.textContent = err.message || 'Failed to create user';
       }
     });
   }

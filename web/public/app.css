@@ -121,11 +121,34 @@ footer {
   text-decoration: none;
   color: var(--fg);
   border: 1px solid var(--border);
-  padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: 10px;
   background: #fff;
   cursor: pointer;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-size: 0; /* hides any destination text; kept for screen readers */
 }
+
+.btnBack:hover {
+  background: var(--bg);
+}
+
+.btnBack::before {
+  content: "\2190";
+  font-size: 17px;
+  line-height: 1;
+}
+
+.page-eyebrow {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.3;
+}
+.page-eyebrow:empty { display: none; }
 
 .menu .pill {
   border: none;
@@ -970,3 +993,55 @@ pre {
   max-height: 320px;
 }
 .audit-pager { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
+
+/* Edit user modal */
+.modal-wide { max-width: 560px; max-height: 85vh; overflow-y: auto; }
+
+.form-grid { display: flex; flex-direction: column; gap: 10px; }
+.form-grid label { display: block; font-size: 14px; }
+.form-grid label > input, .form-grid label > select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.check-inline { display: flex !important; align-items: center; gap: 8px; cursor: pointer; }
+.check-inline input[type="checkbox"] { width: auto !important; margin: 0; }
+
+.accounts-heading { margin: 16px 0 4px; }
+
+.checklist-tools { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.checklist-tools input[type="text"] {
+  flex: 1;
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: auto;
+}
+.checklist-tools .check-inline { white-space: nowrap; font-size: 14px; }
+
+.account-checklist {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.account-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 14px;
+}
+.account-check:last-child { border-bottom: none; }
+.account-check:hover { background: var(--bg); }
+.account-check input[type="checkbox"] { width: auto !important; margin: 0; }
+
+.form-card { width: 100%; max-width: 560px; padding: 16px; }

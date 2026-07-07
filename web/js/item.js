@@ -557,7 +557,7 @@ function formatDateTime(val) {
       renderItem(updated);
       const sectionLabel = section ? section.label : (sectionSlug || 'No section');
       const createdCopy = updated.created_at ? ` · Added ${formatDateTime(updated.created_at)}` : '';
-      itemMetaEl.textContent = `${accountName} · ${labels.sections_label}: ${sectionLabel} · id: ${itemId}${createdCopy}`;
+      itemMetaEl.textContent = `${accountName} · id: ${itemId}${createdCopy}`;
       document.title = `${updated.name} | ${labels.items_label}`;
       notifySuccess('Item saved.');
     } catch (e) {
@@ -612,9 +612,19 @@ function formatDateTime(val) {
   let section = null;
   let schemaFields = [];
   let templateFields = [];
+  const pageEyebrow = document.getElementById('pageEyebrow');
+  const setBackContext = (name) => {
+    if (backToSection) {
+      backToSection.textContent = `Back to ${name}`;
+      backToSection.title = `Back to ${name}`;
+    }
+    if (pageEyebrow) pageEyebrow.textContent = name;
+  };
+  if (!sectionSlug) setBackContext(accountName);
   if (sectionSlug) {
     try {
       section = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(sectionSlug)}`);
+      if (section?.label) setBackContext(section.label);
       const s = section.schema || {};
       schemaFields = Array.isArray(s.fields) ? s.fields : [];
       const columnTemplate = loadColumnTemplate(accountId, sectionSlug);
@@ -655,7 +665,7 @@ function formatDateTime(val) {
     const item = await api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}`);
     const sectionLabel = section ? section.label : (sectionSlug || 'No section');
     const createdCopy = item.created_at ? ` · Added ${formatDateTime(item.created_at)}` : '';
-    itemMetaEl.textContent = `${accountName} · ${labels.sections_label}: ${sectionLabel} · id: ${itemId}${createdCopy}`;
+    itemMetaEl.textContent = `${accountName} · id: ${itemId}${createdCopy}`;
     document.title = `${item.name} | ${labels.items_label}`;
     renderItem(item);
   } catch (e) {

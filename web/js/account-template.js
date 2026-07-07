@@ -61,8 +61,14 @@ async function downloadFile(path, suggestedName) {
     // ignore
   }
   document.title = `${accountName} | Export template`;
+  if (backToAccount) {
+    backToAccount.textContent = `Back to ${accountName}`;
+    backToAccount.title = `Back to ${accountName}`;
+  }
+  const pageEyebrow = document.getElementById('pageEyebrow');
+  if (pageEyebrow) pageEyebrow.textContent = accountName;
   if (templateAccountMeta) {
-    templateAccountMeta.textContent = accountName;
+    templateAccountMeta.textContent = '';
   }
 
   function showElement(el, show) {

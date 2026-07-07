@@ -88,6 +88,13 @@ function renderStatusText(label, count) {
   const me = await loadMeOrRedirect(); if (!me) return;
   renderShell(me);
   const labels = getLabels(me);
+  const accountBackLink = document.querySelector('.btnBack');
+  if (accountBackLink) {
+    accountBackLink.textContent = `Back to ${labels.accounts_label}`;
+    accountBackLink.title = `Back to ${labels.accounts_label}`;
+  }
+  const pageEyebrow = document.getElementById('pageEyebrow');
+  if (pageEyebrow) pageEyebrow.textContent = labels.accounts_label;
   const preferences = getPreferences(me);
   const showSlugs = preferences.show_slugs;
 

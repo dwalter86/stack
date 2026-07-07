@@ -19,6 +19,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const commentsList = document.getElementById('comments-list');
     const commentForm = document.getElementById('comment-form');
 
+    const labelBackLink = async () => {
+        try {
+            const section = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(sectionSlug)}`);
+            if (section.label) {
+                backLink.textContent = `Back to ${section.label}`;
+                backLink.title = `Back to ${section.label}`;
+                const pageEyebrow = document.getElementById('pageEyebrow');
+                if (pageEyebrow) pageEyebrow.textContent = section.label;
+            }
+        } catch { /* keep default label */ }
+    };
+
     const loadItemDetails = async (me) => {
         try {
             const item = await api(`/api/accounts/${accountId}/items/${itemId}`);
@@ -86,6 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderShell(me);
         await loadItemDetails(me);
         await loadComments();
+        labelBackLink();
         if (me.user_type === 'standard') {
             commentForm.classList.add('hidden');
             const notice = document.createElement('p');

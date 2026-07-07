@@ -1,9 +1,17 @@
-import { loadMeOrRedirect, renderShell } from './common.js';
+import { loadMeOrRedirect, renderShell, getLabels } from './common.js';
 
 (async () => {
   const me = await loadMeOrRedirect(); if(!me) return;
   renderShell(me);
   if(!me.is_admin){ window.location.replace('/accounts.html'); return; }
+
+  const backLink = document.getElementById('settingsBackLink');
+  if (backLink) {
+    backLink.textContent = `Back to ${getLabels(me).accounts_label}`;
+    backLink.title = `Back to ${getLabels(me).accounts_label}`;
+  }
+  const pageEyebrow = document.getElementById('pageEyebrow');
+  if (pageEyebrow) pageEyebrow.textContent = getLabels(me).accounts_label;
 
   const list = document.getElementById('settingsList');
   const sections = [

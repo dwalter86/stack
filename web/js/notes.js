@@ -24,6 +24,12 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const section = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(sectionSlug)}`);
       pageTitle.textContent = `Notes for "${section.label}"`;
+      if (section.label) {
+        backLink.textContent = `Back to ${section.label}`;
+        backLink.title = `Back to ${section.label}`;
+        const pageEyebrow = document.getElementById('pageEyebrow');
+        if (pageEyebrow) pageEyebrow.textContent = section.label;
+      }
       sectionMeta.textContent = `Section slug: ${section.slug}`;
       document.title = `Notes | ${section.label}`;
     } catch (error) {

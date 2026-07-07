@@ -5,13 +5,16 @@
 </head><body>
   <header id="site-header"></header>
   <main class="page-container">
-    <a class="btnBack" href="/settings.html">← Back to settings</a>
     <div class="account-header">
       <div class="account-header-main">
-        <h1>Users</h1>
+        <a class="btnBack" href="/settings.html" title="Back to Settings">Back to Settings</a>
+        <div>
+          <div class="page-eyebrow">Settings</div>
+          <h1>Users</h1>
+        </div>
       </div>
       <div class="account-header-actions">
-        <a class="btn primary" href="/admin-add.html">Add user</a>
+        <button type="button" class="btn primary" id="addUserBtn">Add user</button>
       </div>
     </div>
 
@@ -27,60 +30,101 @@
     <section>
       <div id="usersEmptyState" class="empty-state hidden">
         <p class="small">No users yet.</p>
-        <p><a class="btn" href="/admin-add.html">Add user</a></p>
+        <p><button type="button" class="btn" id="emptyAddUserBtn">Add user</button></p>
       </div>
       <div id="userList" class="stacked-list"></div>
     </section>
-    <!-- Add this to your admin.html file -->
-<div id="editUserModal" class="modal hidden">
-  <div class="modal-content">
-    <form id="editUserForm">
-      <h3 id="editUserModalTitle">Edit User</h3>
-      <p id="editUserMsg" class="small error-msg"></p>
-      <input type="hidden" id="editUserId">
+    <div id="editUserModal" class="modal-backdrop hidden">
+      <div class="modal modal-wide">
+        <form id="editUserForm">
+          <h2 id="editUserModalTitle">Edit user</h2>
+          <p id="editUserMsg" class="small error-msg"></p>
+          <input type="hidden" id="editUserId">
 
-      <p>
-        <label>Name
-          <input type="text" id="editUserName" required>
-        </label>
-      </p>
-      <p>
-        <label>Email
-          <input type="email" id="editUserEmail" disabled>
-        </label>
-      </p>
-      <p>
-        <label>User Type
-          <select id="editUserType" required>
-            <option value="standard">Standard user</option>
-            <option value="admin">Admin</option>
-            <option value="super_admin">Super admin</option>
-          </select>
-        </label>
-      </p>
-      <p>
-        <label>
-          <input type="checkbox" id="editUserIsActive">
-          User is active
-        </label>
-      </p>
+          <div class="form-grid">
+            <label>Name
+              <input type="text" id="editUserName" required>
+            </label>
+            <label>Email
+              <input type="email" id="editUserEmail" disabled>
+            </label>
+            <label>User type
+              <select id="editUserType" required>
+                <option value="standard">Standard user</option>
+                <option value="admin">Admin</option>
+                <option value="super_admin">Super admin</option>
+              </select>
+            </label>
+            <label class="check-inline">
+              <input type="checkbox" id="editUserIsActive">
+              <span>User is active</span>
+            </label>
+          </div>
 
-      <div id="editUserAccountsSection" class="hidden">
-        <h4 style="margin:16px 0 8px;">Account access</h4>
-        <p class="small">Choose which accounts this user can see after login.</p>
-        <p>
-          <label><input type="checkbox" id="editUserSelectAll"> Select all</label>
-        </p>
-        <div id="editUserAccountsGrid" class="checkbox-grid"></div>
+          <div id="editUserAccountsSection" class="hidden">
+            <h4 class="accounts-heading">Account access</h4>
+            <p class="small">Choose which accounts this user can see after login.</p>
+            <div class="checklist-tools">
+              <input type="text" id="editUserAccountSearch" placeholder="Search accounts...">
+              <label class="check-inline">
+                <input type="checkbox" id="editUserSelectAll">
+                <span>Select all</span>
+              </label>
+            </div>
+            <div id="editUserAccountsGrid" class="account-checklist"></div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" id="editUserCancel" class="btn">Cancel</button>
+            <button type="submit" class="btn primary">Save changes</button>
+          </div>
+        </form>
       </div>
+    </div>
+    <div id="addUserModal" class="modal-backdrop hidden">
+      <div class="modal modal-wide">
+        <form id="addUserForm">
+          <h2>Add user</h2>
+          <p id="addUserMsg" class="small error-msg"></p>
 
-      <div class="form-actions">
-        <button type="submit" class="btn">Save Changes</button>
-        <button type="button" id="editUserCancel" class="btn secondary">Cancel</button>
+          <div class="form-grid">
+            <label>Full name
+              <input type="text" id="addUserName" placeholder="Name" required>
+            </label>
+            <label>Email
+              <input type="email" id="addUserEmail" placeholder="Email" required>
+            </label>
+            <label>Password
+              <input type="password" id="addUserPassword" placeholder="Password" required>
+            </label>
+            <label>User type
+              <select id="addUserType">
+                <option value="standard">Standard user</option>
+                <option value="admin">Admin</option>
+                <option value="super_admin">Super admin</option>
+              </select>
+            </label>
+          </div>
+
+          <h4 class="accounts-heading">Account access</h4>
+          <p class="small">Choose which accounts this user can see after login. If none are selected, the user is created without memberships.</p>
+          <div class="checklist-tools">
+            <input type="text" id="addUserAccountSearch" placeholder="Search accounts...">
+            <label class="check-inline">
+              <input type="checkbox" id="addUserSelectAll">
+              <span>Select all</span>
+            </label>
+          </div>
+          <div id="addUserAccountsGrid" class="account-checklist"></div>
+          <p class="small">Admins and super admins inherit your customisation settings when you create them.</p>
+
+          <div class="modal-actions">
+            <button type="button" id="addUserCancel" class="btn">Cancel</button>
+            <button type="submit" class="btn primary">Create user</button>
+          </div>
+        </form>
       </div>
-    </form>
-  </div>
-</div>
+    </div>
   </main>
   <script type="module" src="/js/admin.js"></script>
 </body></html>

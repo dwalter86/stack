@@ -419,6 +419,12 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     const myAccounts = await api('/api/me/accounts');
     const match = myAccounts.find(a => a.id === accountId);
     if (match) accountName = match.name;
+    if (backLink && match) {
+      backLink.textContent = `Back to ${accountName}`;
+      backLink.title = `Back to ${accountName}`;
+    }
+    const pageEyebrow = document.getElementById('pageEyebrow');
+    if (pageEyebrow && match) pageEyebrow.textContent = accountName;
   } catch {
     // ignore
   }
@@ -485,7 +491,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
       const section = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}`);
       currentSection = section;
       titleEl.textContent = section.label;
-      metaEl.textContent = showSlugs ? `${accountName} · slug: ${section.slug}` : accountName;
+      metaEl.textContent = showSlugs ? `slug: ${section.slug}` : '';
       const schema = section.schema || {};
       const apiFields = parseTemplate(schema).fields || [];
       schemaFields = templateFromPrefs.fields.length ? templateFromPrefs.fields : apiFields;
@@ -493,7 +499,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
       document.title = `${section.label} | ${labels.sections_label}`;
     } catch {
       titleEl.textContent = `Section ${slug}`;
-      metaEl.textContent = showSlugs ? `${accountName} · slug: ${slug}` : accountName;
+      metaEl.textContent = showSlugs ? `slug: ${slug}` : '';
       currentSection = { slug, label: slug, schema: {} };
       schemaFields = templateFromPrefs.fields.length ? templateFromPrefs.fields : [];
       statusSummaryConfig = null;
