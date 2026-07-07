@@ -1,3 +1,5 @@
+import { APP_VERSION } from './version.js';
+
 export function getToken() { return sessionStorage.getItem('token') || ''; }
 export function setToken(t) { sessionStorage.setItem('token', t); }
 export function logout() { sessionStorage.removeItem('token'); window.location.replace('/'); }
@@ -84,5 +86,11 @@ export function renderShell(user) {
   if (footer) {
     const year = new Date().getFullYear();
     footer.innerHTML = `<div class="container small">&copy; ${year} ADIGI One Platform</div>`;
+  }
+  if (!document.getElementById('app-version')) {
+    const badge = document.createElement('div');
+    badge.id = 'app-version';
+    badge.textContent = `v${APP_VERSION}`;
+    document.body.appendChild(badge);
   }
 }

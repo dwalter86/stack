@@ -1,6 +1,13 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   db:
     image: postgres:16
+    logging: *default-logging
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -39,6 +46,7 @@ services:
 
   adminer:
     image: adminer:4
+    logging: *default-logging
     restart: unless-stopped
     ports:
       - "${ADMINER_BIND}:${ADMINER_PORT}:8080"
@@ -49,6 +57,7 @@ services:
 
   api:
     build: ./api
+    logging: *default-logging
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
@@ -65,17 +74,20 @@ services:
 
   gotenberg:
     image: gotenberg/gotenberg:8
+    logging: *default-logging
     restart: unless-stopped
     networks: [backend]
 
   web:
     build: ./web
+    logging: *default-logging
     restart: unless-stopped
     depends_on: [api]
     networks: [backend]
 
   caddy:
     image: caddy:2
+    logging: *default-logging
     restart: unless-stopped
     ports:
       - "${HTTP_PORT}:80"

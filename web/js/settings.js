@@ -11,6 +11,9 @@ import { loadMeOrRedirect, renderShell } from './common.js';
     { key:'customisation', label:'Customisation', description:'Rename UI labels for accounts, sections, and items for your user.', href:'/customisation.html' },
     { key:'api-calls', label:'API calls', description:'View endpoints for managing sections and items.', href:'/settings-api-calls.html' },
   ];
+  if (me.user_type === 'super_admin') {
+    sections.push({ key:'audit-log', label:'Audit log', description:'Full history of changes and login attempts across the platform.', href:'/audit-log.html' });
+  }
 
   list.innerHTML = sections.map(section => `
     <div class="card account-card">

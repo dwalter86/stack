@@ -918,3 +918,55 @@ pre {
   outline-color: #d33;
 }
 .input-error:focus { outline: 2px solid #d33; }
+
+#app-version {
+  position: fixed;
+  bottom: 8px;
+  right: 12px;
+  z-index: 9999;
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Audit log page */
+.audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+.audit-filters input, .audit-filters select {
+  font: inherit;
+  width: auto;
+  flex: 0 1 auto;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.audit-filters input[type="text"] { min-width: 160px; flex: 1 1 160px; }
+
+.audit-table-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: 6px; }
+.audit-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.audit-table th, .audit-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.audit-table th { background: var(--bg); position: sticky; top: 0; }
+.audit-time { white-space: nowrap; }
+.audit-path { word-break: break-all; color: var(--muted); }
+.audit-status-ok { color: #2e9e44; }
+.audit-status-warn { color: #e6a700; }
+.audit-status-error { color: #d33; }
+.audit-action-failed td:nth-child(3) code { color: #d33; }
+.audit-action-delete td:nth-child(3) code { color: #b06000; }
+.audit-details pre {
+  margin: 0;
+  padding: 10px;
+  background: var(--bg);
+  border-radius: 6px;
+  font-size: 12px;
+  overflow-x: auto;
+  max-height: 320px;
+}
+.audit-pager { display: flex; align-items: center; gap: 12px; margin: 12px 0; }

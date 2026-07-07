@@ -1,0 +1,23 @@
+#!/bin/sh
+# Auto-increment the patch version in web/js/version.js on every commit.
+# If version.js is already staged (manual bump), leave it alone.
+VERSION_FILE="web/js/version.js"
+
+[ -f "$VERSION_FILE" ] || exit 0
+if git diff --cached --name-only | grep -qx "$VERSION_FILE"; then
+  exit 0
+fi
+
+current=$(sed -n "s/.*APP_VERSION = '\([0-9][0-9.]*\)'.*/\1/p" "$VERSION_FILE")
+[ -n "$current" ] || exit 0
+
+major=$(echo "$current" | cut -d. -f1)
+minor=$(echo "$current" | cut -d. -f2)
+patch=$(echo "$current" | cut -d. -f3)
+next="$major.$minor.$((patch + 1))"
+
+tmp=$(mktemp)
+sed "s/APP_VERSION = '$current'/APP_VERSION = '$next'/" "$VERSION_FILE" > "$tmp" && mv "$tmp" "$VERSION_FILE"
+chmod 644 "$VERSION_FILE"  # mktemp files are 0600; nginx in the web image must be able to read this
+git add "$VERSION_FILE"
+echo "pre-commit: bumped APP_VERSION $current -> $next"

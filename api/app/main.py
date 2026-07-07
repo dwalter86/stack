@@ -33,9 +33,10 @@ from schemas import (
     ExportRequest,
 )
 from auth import login_and_get_user, create_token, memberships_for_user
-from deps import current_user, ip_allowlist, require_admin, require_editor
+from deps import current_user, ip_allowlist, require_admin, require_editor, require_super_admin
 import rls
 import exports
+import audit
 from sqlalchemy import text
 from database import SessionLocal
 
@@ -177,6 +178,26 @@ app.add_middleware(
   allow_methods=["*"],
   allow_headers=["*"]
 )
+app.add_middleware(audit.AuditMiddleware)
+
+@app.get("/api/admin/audit-log", dependencies=[Depends(ip_allowlist)])
+async def read_audit_log(
+  limit: int = 50,
+  offset: int = 0,
+  user_email: str | None = None,
+  action: str | None = None,
+  account_id: str | None = None,
+  date_from: str | None = None,
+  date_to: str | None = None,
+  search: str | None = None,
+  _admin: dict = Depends(require_super_admin),
+):
+  limit = max(1, min(limit, 200))
+  offset = max(0, offset)
+  return audit.query_audit_log(
+    limit=limit, offset=offset, user_email=user_email, action=action,
+    account_id=account_id, date_from=date_from, date_to=date_to, search=search,
+  )
 
 @app.post("/api/login", response_model=Token, dependencies=[Depends(ip_allowlist)])
 async def login(payload: LoginRequest):
