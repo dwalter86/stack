@@ -87,6 +87,31 @@ def resolve_section_schema(db, account_id: str, override=None) -> dict:
   return DEFAULT_SECTION_SCHEMA
 
 
+def engineer_names(account_id: str) -> list[str] | None:
+  """Engineer names for an account's ILG Forms company, or None when the account has no
+  integration / no engineers have been read yet (then layouts are left exactly as stored)."""
+  with SessionLocal() as db:
+    row = db.execute(text("""
+      SELECT i.engineers FROM ilgforms_integration_accounts ia JOIN ilgforms_integrations i ON i.id = ia.integration_id
+      WHERE ia.account_id::text = :a AND i.enabled LIMIT 1
+    """), {"a": account_id}).first()
+  if not row or not isinstance(row[0], list) or not row[0]:
+    return None
+  return [e["name"] for e in row[0] if isinstance(e, dict) and e.get("name")]
+
+
+def with_engineer_options(schema: dict, names: list[str] | None) -> dict:
+  """The Engineer dropdown always offers the current ILG Forms engineer list. It is applied when a
+  layout is read, not stored per incident, so every existing incident follows the list too."""
+  if not names or not isinstance(schema, dict):
+    return schema
+  options = {"option1": ""}
+  options.update({f"option{i + 2}": name for i, name in enumerate(names)})
+  fields = [dict(f, options=options) if isinstance(f, dict) and f.get("key") == "engineer" else f
+            for f in schema.get("fields") or []]
+  return dict(schema, fields=fields)
+
+
 class IntegrationAuthError(Exception):
   def __init__(self, status: int, detail: str):
     super().__init__(detail)

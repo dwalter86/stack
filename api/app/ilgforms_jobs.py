@@ -41,7 +41,7 @@ def _integration(db, integration_id: str) -> dict | None:
   row = db.execute(text("""
     SELECT id::text, name, company_id, integration_key, main_datasource, item_id_column,
            row_id_column, account_id_column, enabled, device_datasource, incident_datasource,
-           account_datasource, accept_new_accounts
+           account_datasource, accept_new_accounts, engineer_datasource
     FROM ilgforms_integrations WHERE id = :i
   """), {"i": integration_id}).first()
   if not row:
@@ -49,7 +49,8 @@ def _integration(db, integration_id: str) -> dict | None:
   return {"id": row[0], "name": row[1], "company_id": row[2], "integration_key": row[3],
           "main_datasource": row[4], "item_id_column": row[5], "row_id_column": row[6],
           "account_id_column": row[7], "enabled": row[8], "device_datasource": row[9],
-          "incident_datasource": row[10], "account_datasource": row[11], "accept_new_accounts": row[12]}
+          "incident_datasource": row[10], "account_datasource": row[11], "accept_new_accounts": row[12],
+          "engineer_datasource": row[13]}
 
 
 def _client(integration: dict, transport=None) -> IlgFormsClient:
@@ -369,6 +370,41 @@ def _reconcile_accounts(integration: dict, linked_accounts: list[str], rows: lis
   return linked_accounts + created
 
 
+def plan_engineers(rows: list[dict]) -> list[dict]:
+  """Pure: the engineers datasource as a clean list, in sheet order, names de-duplicated."""
+  out, seen = [], set()
+  for row in rows:
+    name = str(row.get("name") or "").strip()
+    if not name or name.lower() in seen:
+      continue
+    seen.add(name.lower())
+    out.append({"name": name, "department": str(row.get("department") or "").strip(),
+                "email": str(row.get("email1") or "").strip(), "email2": str(row.get("email2") or "").strip(),
+                "reasons": [r.strip() for r in str(row.get("Reason") or "").split("|") if r.strip()]})
+  return out
+
+
+def _store_engineers(integration: dict, rows: list[dict]):
+  engineers = plan_engineers(rows)
+  if not engineers:
+    return   # an empty or unreadable sheet must not blank every dropdown
+  emails = {e["name"]: e["email"] for e in engineers if e["email"]}
+  with SessionLocal() as db:
+    before = db.execute(text("SELECT engineers FROM ilgforms_integrations WHERE id = :i"), {"i": integration["id"]}).scalar()
+    if before != engineers:
+      db.execute(text("""
+        UPDATE ilgforms_integrations SET engineers = CAST(:e AS jsonb), engineer_emails = CAST(:m AS jsonb) WHERE id = :i
+      """), {"e": json.dumps(engineers), "m": json.dumps(emails), "i": integration["id"]})
+      old_names = {e.get("name") for e in before} if isinstance(before, list) else set()
+      new_names = {e["name"] for e in engineers}
+      added, removed = sorted(new_names - old_names), sorted(old_names - new_names)
+      detail = "; ".join(p for p in (f"added {', '.join(added)}" if added else "", f"removed {', '.join(removed)}" if removed else "") if p)
+      _log(db, integration_id=integration["id"], account_id=None, direction="received", event="engineers.updated",
+           result="success", summary=f"Engineer list refreshed from {integration['engineer_datasource']}: "
+                                     f"{len(engineers)} engineers" + (f" ({detail})" if detail else " (details changed)"))
+      db.commit()
+
+
 def _datasource_specs(integration: dict) -> list[dict]:
   """Where each datasource keeps its row key, the Stack item id, and the account id."""
   return [
@@ -398,8 +434,14 @@ def reconcile(integration_id: str, transport=None) -> dict:
       account_rows = client.get_rows(integration["account_datasource"])
     except IlgFormsError:
       account_rows = None   # this company has no account list: nothing to check
+    try:
+      engineer_rows = client.get_rows(integration["engineer_datasource"])
+    except IlgFormsError:
+      engineer_rows = None  # no engineers list for this company: keep whatever is configured
   if account_rows is not None:
     accounts = _reconcile_accounts(integration, accounts, account_rows)
+  if engineer_rows is not None:
+    _store_engineers(integration, engineer_rows)
 
   account_items: dict[str, set[str]] = {}
   for account_id in accounts:

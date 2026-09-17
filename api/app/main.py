@@ -357,7 +357,9 @@ async def list_sections(account_id: str, user_id: str = Depends(current_user)):
       WHERE account_id = :a
       ORDER BY created_at
     """), {"a": account_id}).all()
-    return [SectionOut(id=r[0], slug=r[1], label=r[2], detail=r[3], schema=normalize_section_schema(r[4]), address=r[5]) for r in rows]
+    engineers = ilgforms_sync.engineer_names(account_id)
+    return [SectionOut(id=r[0], slug=r[1], label=r[2], detail=r[3], address=r[5],
+                       schema=ilgforms_sync.with_engineer_options(normalize_section_schema(r[4]), engineers)) for r in rows]
 
 @app.post("/api/accounts/{account_id}/sections", response_model=SectionOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def create_section(account_id: str, body: SectionCreate, request: Request, user_id: str = Depends(current_user)):
@@ -383,7 +385,8 @@ async def create_section(account_id: str, body: SectionCreate, request: Request,
         FROM sections WHERE account_id = :a AND slug = :s
       """), {"a": account_id, "s": body.slug}).first()
       row = fresh or row
-  return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], schema=normalize_section_schema(row[4]), address=row[5])
+  return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], address=row[5],
+                    schema=ilgforms_sync.with_engineer_options(normalize_section_schema(row[4]), ilgforms_sync.engineer_names(account_id)))
 
 @app.get("/api/accounts/{account_id}/sections/{slug}", response_model=SectionOut, dependencies=[Depends(ip_allowlist)])
 async def get_section(account_id: str, slug: str, user_id: str = Depends(current_user)):
@@ -396,7 +399,8 @@ async def get_section(account_id: str, slug: str, user_id: str = Depends(current
     """), {"a": account_id, "s": slug}).first()
     if not row:
       raise HTTPException(status_code=404, detail="Section not found")
-    return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], schema=normalize_section_schema(row[4]), address=row[5])
+    return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], address=row[5],
+                    schema=ilgforms_sync.with_engineer_options(normalize_section_schema(row[4]), ilgforms_sync.engineer_names(account_id)))
 
 @app.put("/api/accounts/{account_id}/sections/{slug}", response_model=SectionOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def update_section(account_id: str, slug: str, body: SectionUpdate, request: Request, user_id: str = Depends(current_user)):
@@ -416,7 +420,8 @@ async def update_section(account_id: str, slug: str, body: SectionUpdate, reques
     db.commit()
   if from_web_ui(request):
     push_to_ilgforms(ilgforms_outbound.section_updated, account_id, slug)
-  return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], schema=normalize_section_schema(row[4]), address=row[5])
+  return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], address=row[5],
+                    schema=ilgforms_sync.with_engineer_options(normalize_section_schema(row[4]), ilgforms_sync.engineer_names(account_id)))
 
 @app.delete("/api/accounts/{account_id}/sections/{slug}", dependencies=[Depends(ip_allowlist), Depends(require_editor)])
 async def delete_section(account_id: str, slug: str, request: Request, user_id: str = Depends(current_user)):

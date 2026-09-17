@@ -6,6 +6,7 @@ import json
 import httpx
 
 LAYOUTS = {
+  "engineers": ["id", "department", "name", "email1", "email2", "Reason"],
   "accountList": ["Answer Value", "Display Text"],
   "nflList": ["ID", "incd", "postCode", "date", "colour", "account", "address"],
   "nfmain": ["ID", "incd", "postCode", "houseNo", "customerName", "streetName", "initialVisit", "notes", "incdId",
@@ -30,8 +31,8 @@ class FakeIlgForms:
   def rows(self, name):
     return [dict(zip(LAYOUTS[name], r)) for r in self.sheets[name]]
 
-  def add(self, name, **values):
-    self.sheets[name].append([str(values.get(h, "")) for h in LAYOUTS[name]])
+  def add(self, sheet, /, **values):   # positional-only: the engineers sheet has a column called "name"
+    self.sheets[sheet].append([str(values.get(h, "")) for h in LAYOUTS[sheet]])
 
   def handle(self, request):
     if request.method == "GET":

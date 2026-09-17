@@ -210,3 +210,27 @@ class AccountListPlanTests(unittest.TestCase):
   def test_an_account_that_exists_but_is_not_linked_is_not_new(self):
     plan = jobs.plan_accounts([{"Answer Value": self.B, "Display Text": "Other customer"}], linked={self.A}, existing={self.A, self.B})
     self.assertEqual(plan["new"], [])
+
+
+@unittest.skipUnless(HAVE_DEPS, "needs the API image (httpx, sqlalchemy)")
+class EngineerTests(unittest.TestCase):
+  ROWS = [{"id": "1", "department": "Electrical", "name": " Eng One ", "email1": "one@example.com", "email2": "", "Reason": "Electrician to Call|Alarm Engineer to Call"},
+          {"id": "2", "department": "Gas", "name": "Eng Two", "email1": "", "email2": "", "Reason": ""},
+          {"id": "3", "department": "Gas", "name": "eng two", "email1": "dupe@example.com", "email2": "", "Reason": ""},
+          {"id": "4", "department": "", "name": "", "email1": "x@example.com", "email2": "", "Reason": ""}]
+
+  def test_plan_engineers(self):
+    plan = jobs.plan_engineers(self.ROWS)
+    self.assertEqual([e["name"] for e in plan], ["Eng One", "Eng Two"])   # trimmed, blank + duplicate names dropped
+    self.assertEqual(plan[0]["reasons"], ["Electrician to Call", "Alarm Engineer to Call"])
+    self.assertEqual(plan[0]["email"], "one@example.com")
+
+  def test_dropdown_options_are_injected_only_into_the_engineer_field(self):
+    import ilgforms_sync as sync
+    schema = {"fields": [{"key": "engineer", "type": "dropdown", "options": {"option1": ""}},
+                         {"key": "status", "type": "dropdown", "options": {"option1": "", "option2": "Repaired"}}], "status_summary": {}}
+    out = sync.with_engineer_options(schema, ["Eng One", "Eng Two"])
+    self.assertEqual(out["fields"][0]["options"], {"option1": "", "option2": "Eng One", "option3": "Eng Two"})
+    self.assertEqual(out["fields"][1]["options"], {"option1": "", "option2": "Repaired"})
+    self.assertEqual(schema["fields"][0]["options"], {"option1": ""})        # the stored layout is not mutated
+    self.assertIs(sync.with_engineer_options(schema, None), schema)           # no integration: untouched

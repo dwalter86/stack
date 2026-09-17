@@ -159,6 +159,7 @@
           <tr><td>Delete an incident</td><td>The incident row and every property and appliance row under it are removed</td></tr>
         </tbody>
       </table></div>
+      <p><strong>Engineers.</strong> The Engineer dropdown on every incident of a linked account is read from the ILG Forms engineers datasource, refreshed about every 15 minutes or on "Check ILG Forms now". Add or remove an engineer there and it follows here, on existing incidents as well as new ones. The same list supplies the engineer's email that is written to the device datasource.</p>
       <p><strong>Accounts created in ILG Forms.</strong> If a row is added to the account list with a new id and a name, this platform can create a matching account with that same id, link it, and make it visible to super admins, who then share it from Settings, Users. This is switched off by default and is set per ILG Forms company. It must stay off on any server that shares its ILG Forms company with another server, because both would read the same list and copy each other's accounts.</p>
     </section>
   </main>
