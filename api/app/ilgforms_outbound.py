@@ -326,7 +326,7 @@ def section_deleting(account_id: str, slug: str):
         chunk = row_ids[start:start + 50]
         _enqueue(db, integ, account_id, kind=JOB_DELETE_ROWS, datasource=datasource, payload={"row_ids": chunk},
                  direction="sent", event="item.delete", section=section,
-                 summary=f"Incident {section['label']}: {len(chunk)} row{'s' if len(chunk) != 1 else ''} queued for removal from {datasource}")
+                 summary=f"Incident {section['label']}: removal of {len(chunk)} row{'s' if len(chunk) != 1 else ''} queued for {datasource}")
     link = db.execute(text("""
       DELETE FROM ilgforms_section_links WHERE account_id = :a AND section_slug = :s AND datasource = :ds RETURNING row_id
     """), {"a": account_id, "s": slug, "ds": integ["incident"]}).first()
