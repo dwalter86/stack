@@ -9,6 +9,92 @@ def set_current_account(account_id: str):
 def _schema_name(account_id: str) -> str:
   return f"tenant_{account_id.replace('-', '')}"
 
+def create_tenant_schema(db, account_id: str):
+  """Create an account's tenant schema and tables (idempotent). Runs inside the caller's transaction."""
+  account_id = str(account_id)
+  schema = _schema_name(account_id)
+  db.execute(text(f"""
+      DO $$
+      DECLARE sch text := '{schema}';
+      BEGIN
+        EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I', sch);
+        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.items (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          section_slug TEXT NOT NULL DEFAULT ''default'',
+          name TEXT NOT NULL,
+          data JSONB NOT NULL DEFAULT ''{{}}'',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )', sch);
+        EXECUTE format('ALTER TABLE %I.items ADD COLUMN IF NOT EXISTS section_slug TEXT', sch);
+        EXECUTE format('UPDATE %I.items SET section_slug = ''default'' WHERE section_slug IS NULL', sch);
+        EXECUTE format('ALTER TABLE %I.items ALTER COLUMN section_slug SET DEFAULT ''default''', sch);
+        EXECUTE format('ALTER TABLE %I.items ALTER COLUMN section_slug SET NOT NULL', sch);
+        EXECUTE format('ALTER TABLE %I.items ENABLE ROW LEVEL SECURITY', sch);
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = sch AND tablename = 'items' AND policyname = 'items_tenant_policy'
+        ) THEN
+          EXECUTE format(
+            'CREATE POLICY items_tenant_policy ON %I.items
+             USING ( current_setting(''app.current_account'')::uuid = ''{account_id}'' )
+             WITH CHECK ( current_setting(''app.current_account'')::uuid = ''{account_id}'' )',
+            sch);
+        END IF;
+
+        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.comments (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          item_id UUID NOT NULL REFERENCES %I.items(id) ON DELETE CASCADE,
+          user_id UUID,
+          user_name TEXT,
+          comment TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )', sch, sch);
+        EXECUTE format('ALTER TABLE %I.comments ENABLE ROW LEVEL SECURITY', sch);
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = sch AND tablename = 'comments' AND policyname = 'comments_tenant_policy'
+        ) THEN
+          EXECUTE format('CREATE POLICY comments_tenant_policy ON %I.comments USING (true)', sch);
+        END IF;
+
+        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.section_notes (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          section_slug TEXT NOT NULL,
+          user_id UUID,
+          user_name TEXT,
+          note TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )', sch);
+        EXECUTE format('ALTER TABLE %I.section_notes ENABLE ROW LEVEL SECURITY', sch);
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = sch AND tablename = 'section_notes' AND policyname = 'section_notes_tenant_policy'
+        ) THEN
+          EXECUTE format('CREATE POLICY section_notes_tenant_policy ON %I.section_notes USING (true)', sch);
+        END IF;
+
+        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.item_sync (
+          item_id UUID NOT NULL REFERENCES %I.items(id) ON DELETE CASCADE,
+          datasource TEXT NOT NULL,
+          row_id TEXT,
+          status TEXT NOT NULL DEFAULT ''not_synced'',
+          last_checked_at TIMESTAMPTZ,
+          last_synced_at TIMESTAMPTZ,
+          last_error TEXT,
+          PRIMARY KEY (item_id, datasource)
+        )', sch, sch);
+        EXECUTE format('ALTER TABLE %I.item_sync ENABLE ROW LEVEL SECURITY', sch);
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = sch AND tablename = 'item_sync' AND policyname = 'item_sync_tenant_policy'
+        ) THEN
+          EXECUTE format('CREATE POLICY item_sync_tenant_policy ON %I.item_sync USING (true)', sch);
+        END IF;
+
+      END $$;
+    """))
+
+
 def list_items(account_id: str, section: str, limit: int = 50, cursor: str | None = None):
   schema = _schema_name(account_id)
   where = "WHERE i.section_slug = :section"

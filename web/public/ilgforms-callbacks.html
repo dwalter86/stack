@@ -146,6 +146,9 @@
       <div class="table-wrapper"><table class="doc-table">
         <thead><tr><th>On this platform</th><th>In ILG Forms</th></tr></thead>
         <tbody>
+          <tr><td>Link an account to the ILG Forms company (Settings, ILG Forms sync, Accounts, or when creating an account)</td><td>New row in the account list, so forms can choose the account. Skipped if the list already has that id.</td></tr>
+          <tr><td>Rename a linked account</td><td>Its account list row is renamed</td></tr>
+          <tr><td>Unlink or delete a linked account</td><td>Its account list row is removed</td></tr>
           <tr><td>Create an incident</td><td>New row in the incident list datasource</td></tr>
           <tr><td>Rename an incident</td><td>That row is updated</td></tr>
           <tr><td>Add or edit an item in an incident whose row has no post code or address yet</td><td>The incident row takes them from that item. Once set they are never overwritten.</td></tr>
@@ -156,6 +159,7 @@
           <tr><td>Delete an incident</td><td>The incident row and every property and appliance row under it are removed</td></tr>
         </tbody>
       </table></div>
+      <p><strong>Accounts created in ILG Forms.</strong> If a row is added to the account list with a new id and a name, this platform can create a matching account with that same id, link it, and make it visible to super admins, who then share it from Settings, Users. This is switched off by default and is set per ILG Forms company. It must stay off on any server that shares its ILG Forms company with another server, because both would read the same list and copy each other's accounts.</p>
     </section>
   </main>
   <script type="module">

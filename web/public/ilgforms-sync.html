@@ -27,6 +27,7 @@
       <button class="sync-tab is-active" role="tab" data-tab="activity">Activity</button>
       <button class="sync-tab" role="tab" data-tab="failed">Failed <span class="sync-tab-count" id="failedCount"></span></button>
       <button class="sync-tab" role="tab" data-tab="orphans">Orphan rows <span class="sync-tab-count" id="orphanCount"></span></button>
+      <button class="sync-tab" role="tab" data-tab="accounts">Accounts</button>
     </div>
 
     <section id="logPanel">
@@ -68,6 +69,11 @@
         <span id="pageInfo" class="small"></span>
         <button class="btn" id="pageNext">Older &rarr;</button>
       </div>
+    </section>
+
+    <section id="accountsPanel" class="hidden">
+      <p class="small">Accounts linked to an ILG Forms company. A linked account syncs its incidents and items, and appears in that company's account list so forms can choose it. Accounts that are not linked are never sent to ILG Forms.</p>
+      <div id="accountsBody"></div>
     </section>
 
     <section id="orphanPanel" class="hidden">

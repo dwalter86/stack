@@ -6,6 +6,7 @@ import json
 import httpx
 
 LAYOUTS = {
+  "accountList": ["Answer Value", "Display Text"],
   "nflList": ["ID", "incd", "postCode", "date", "colour", "account", "address"],
   "nfmain": ["ID", "incd", "postCode", "houseNo", "customerName", "streetName", "initialVisit", "notes", "incdId",
              "accountId", "teleNo1", "teleNo2", "email", "itemId"],

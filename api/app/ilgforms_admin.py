@@ -3,6 +3,7 @@ status for the UI icon, and the super-admin sync log / summary / orphans / retry
 from sqlalchemy import text
 
 import ilgforms_jobs
+import ilgforms_outbound
 import rls
 from database import SessionLocal
 from ilgforms_sync import JOB_WRITE_ITEM_ID, account_has_integration
@@ -247,3 +248,55 @@ def retry_failed(log_id: str | None = None) -> int:
                               WHERE item_id = :i AND datasource = :ds"""), {"i": item_id, "ds": datasource})
     db.commit()
   return len(jobs)
+
+
+# --- which accounts belong to which integration (and so appear in the forms' account list) ------------
+
+def list_integrations() -> dict:
+  with SessionLocal() as db:
+    integrations = db.execute(text("""
+      SELECT id::text, name, company_id, enabled, account_datasource, accept_new_accounts
+      FROM ilgforms_integrations ORDER BY name
+    """)).all()
+    linked = db.execute(text("""
+      SELECT ia.integration_id::text, a.id::text, a.name, ia.list_status, ia.list_checked_at
+      FROM ilgforms_integration_accounts ia JOIN accounts a ON a.id = ia.account_id ORDER BY a.name
+    """)).all()
+    unlinked = db.execute(text("""
+      SELECT a.id::text, a.name FROM accounts a
+      WHERE NOT EXISTS (SELECT 1 FROM ilgforms_integration_accounts ia WHERE ia.account_id = a.id) ORDER BY a.name
+    """)).all()
+  return {
+    "integrations": [{"id": i[0], "name": i[1], "company_id": i[2], "enabled": i[3], "account_datasource": i[4],
+                      "accept_new_accounts": i[5],
+                      "accounts": [{"id": l[1], "name": l[2], "list_status": l[3], "list_checked_at": _iso(l[4])}
+                                   for l in linked if l[0] == i[0]]} for i in integrations],
+    "unlinked_accounts": [{"id": u[0], "name": u[1]} for u in unlinked],
+  }
+
+
+def link_account(integration_id: str, account_id: str) -> bool:
+  with SessionLocal() as db:
+    ok = db.execute(text("""
+      SELECT (SELECT 1 FROM ilgforms_integrations WHERE id::text = :i), (SELECT 1 FROM accounts WHERE id::text = :a)
+    """), {"i": integration_id, "a": account_id}).first()
+    if not ok or not ok[0] or not ok[1]:
+      return False
+    inserted = db.execute(text("""
+      INSERT INTO ilgforms_integration_accounts (integration_id, account_id)
+      VALUES (:i, :a) ON CONFLICT (account_id) DO NOTHING RETURNING account_id
+    """), {"i": integration_id, "a": account_id}).first()
+    db.commit()
+  if inserted:
+    rls.ensure_item_sync_table(account_id)
+    ilgforms_outbound.account_linked(account_id)
+  return True
+
+
+def unlink_account(account_id: str) -> bool:
+  ilgforms_outbound.account_removed(account_id)   # before the link goes: it says which list to remove the row from
+  with SessionLocal() as db:
+    gone = db.execute(text("DELETE FROM ilgforms_integration_accounts WHERE account_id::text = :a RETURNING account_id"),
+                      {"a": account_id}).first()
+    db.commit()
+  return bool(gone)

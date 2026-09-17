@@ -60,6 +60,8 @@ ACTION_RULES = [
   ("POST",   r"^/api/integrations/ilgforms/incident$",           "ilgforms.incident"),
   ("POST",   r"^/api/integrations/ilgforms/devices$",            "ilgforms.devices"),
   ("POST",   r"^/api/integrations/ilgforms/engineer-update$",    "ilgforms.engineer_update"),
+  ("POST",   r"^/api/admin/ilgforms/integrations/[^/]+/accounts$", "ilgforms.account_link"),
+  ("DELETE", r"^/api/admin/ilgforms/accounts/[^/]+$",            "ilgforms.account_unlink"),
   ("POST",   r"^/api/admin/ilgforms/retry$",                     "ilgforms.retry"),
   ("POST",   r"^/api/admin/ilgforms/reconcile$",                 "ilgforms.reconcile"),
 ]

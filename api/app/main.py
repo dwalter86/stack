@@ -300,7 +300,6 @@ async def create_account(body: AccountCreate, user_id: str = Depends(current_use
       raise HTTPException(status_code=500, detail="Failed to create account")
 
     account_id = row[0]
-    schema_name = f"tenant_{account_id.replace('-', '')}"
 
     db.execute(
       text("""
@@ -311,94 +310,14 @@ async def create_account(body: AccountCreate, user_id: str = Depends(current_use
       {"u": user_id, "a": account_id}
     )
 
-    schema_sql = f"""
-      DO $$
-      DECLARE sch text := '{schema_name}';
-      BEGIN
-        EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I', sch);
-        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.items (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          section_slug TEXT NOT NULL DEFAULT ''default'',
-          name TEXT NOT NULL,
-          data JSONB NOT NULL DEFAULT ''{{}}'',
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )', sch);
-        EXECUTE format('ALTER TABLE %I.items ADD COLUMN IF NOT EXISTS section_slug TEXT', sch);
-        EXECUTE format('UPDATE %I.items SET section_slug = ''default'' WHERE section_slug IS NULL', sch);
-        EXECUTE format('ALTER TABLE %I.items ALTER COLUMN section_slug SET DEFAULT ''default''', sch);
-        EXECUTE format('ALTER TABLE %I.items ALTER COLUMN section_slug SET NOT NULL', sch);
-        EXECUTE format('ALTER TABLE %I.items ENABLE ROW LEVEL SECURITY', sch);
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_policies
-          WHERE schemaname = sch AND tablename = 'items' AND policyname = 'items_tenant_policy'
-        ) THEN
-          EXECUTE format(
-            'CREATE POLICY items_tenant_policy ON %I.items
-             USING ( current_setting(''app.current_account'')::uuid = ''{account_id}'' )
-             WITH CHECK ( current_setting(''app.current_account'')::uuid = ''{account_id}'' )',
-            sch);
-        END IF;
-
-        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.comments (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          item_id UUID NOT NULL REFERENCES %I.items(id) ON DELETE CASCADE,
-          user_id UUID,
-          user_name TEXT,
-          comment TEXT NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )', sch, sch);
-        EXECUTE format('ALTER TABLE %I.comments ENABLE ROW LEVEL SECURITY', sch);
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_policies
-          WHERE schemaname = sch AND tablename = 'comments' AND policyname = 'comments_tenant_policy'
-        ) THEN
-          EXECUTE format('CREATE POLICY comments_tenant_policy ON %I.comments USING (true)', sch);
-        END IF;
-
-        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.section_notes (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          section_slug TEXT NOT NULL,
-          user_id UUID,
-          user_name TEXT,
-          note TEXT NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )', sch);
-        EXECUTE format('ALTER TABLE %I.section_notes ENABLE ROW LEVEL SECURITY', sch);
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_policies
-          WHERE schemaname = sch AND tablename = 'section_notes' AND policyname = 'section_notes_tenant_policy'
-        ) THEN
-          EXECUTE format('CREATE POLICY section_notes_tenant_policy ON %I.section_notes USING (true)', sch);
-        END IF;
-
-        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.item_sync (
-          item_id UUID NOT NULL REFERENCES %I.items(id) ON DELETE CASCADE,
-          datasource TEXT NOT NULL,
-          row_id TEXT,
-          status TEXT NOT NULL DEFAULT ''not_synced'',
-          last_checked_at TIMESTAMPTZ,
-          last_synced_at TIMESTAMPTZ,
-          last_error TEXT,
-          PRIMARY KEY (item_id, datasource)
-        )', sch, sch);
-        EXECUTE format('ALTER TABLE %I.item_sync ENABLE ROW LEVEL SECURITY', sch);
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_policies
-          WHERE schemaname = sch AND tablename = 'item_sync' AND policyname = 'item_sync_tenant_policy'
-        ) THEN
-          EXECUTE format('CREATE POLICY item_sync_tenant_policy ON %I.item_sync USING (true)', sch);
-        END IF;
-
-      END $$;
-    """
-    db.execute(text(schema_sql))
+    rls.create_tenant_schema(db, account_id)
     db.commit()
     return AccountOut(id=row[0], name=row[1])
 
 # --- Account management ---
 
 @app.put("/api/accounts/{account_id}", response_model=AccountOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
-async def update_account(account_id: str, body: AccountUpdate, user_id: str = Depends(current_user)):
+async def update_account(account_id: str, body: AccountUpdate, request: Request, user_id: str = Depends(current_user)):
   with SessionLocal() as db:
     row = db.execute(
       text("UPDATE accounts SET name=:n WHERE id=:a RETURNING id::text, name"),
@@ -407,11 +326,16 @@ async def update_account(account_id: str, body: AccountUpdate, user_id: str = De
     if not row:
       raise HTTPException(status_code=404, detail="Account not found")
     db.commit()
-    return AccountOut(id=row[0], name=row[1])
+  if from_web_ui(request):
+    push_to_ilgforms(ilgforms_outbound.account_renamed, account_id)   # keeps the forms' account list in step
+  return AccountOut(id=row[0], name=row[1])
 
 @app.delete("/api/accounts/{account_id}", dependencies=[Depends(ip_allowlist), Depends(require_editor)])
-async def delete_account(account_id: str, user_id: str = Depends(current_user)):
+async def delete_account(account_id: str, request: Request, user_id: str = Depends(current_user)):
   schema_name = f"tenant_{account_id.replace('-', '')}"
+  if from_web_ui(request):
+    # Before the delete: the integration link (which says which list to clean) goes with the account.
+    push_to_ilgforms(ilgforms_outbound.account_removed, account_id)
   with SessionLocal() as db:
     db.execute(text(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE"))
     db.execute(text("DELETE FROM memberships WHERE account_id=:a"), {"a": account_id})
@@ -675,6 +599,24 @@ def ilgforms_sync_log_payload(log_id: str, _admin: dict = Depends(require_super_
 @app.get("/api/admin/ilgforms/orphans", dependencies=[Depends(ip_allowlist)])
 def ilgforms_orphans(_admin: dict = Depends(require_super_admin)):
   return ilgforms_admin.list_orphans()
+
+@app.get("/api/admin/ilgforms/integrations", dependencies=[Depends(ip_allowlist)])
+def ilgforms_integrations(_admin: dict = Depends(require_super_admin)):
+  return ilgforms_admin.list_integrations()
+
+@app.post("/api/admin/ilgforms/integrations/{integration_id}/accounts", dependencies=[Depends(ip_allowlist)])
+def ilgforms_link_account(integration_id: str, body: dict = Body(...), _admin: dict = Depends(require_super_admin)):
+  """Link an account to an integration: it starts syncing and is added to the forms' account list."""
+  if not ilgforms_admin.link_account(integration_id, str(body.get("account_id") or "")):
+    raise HTTPException(status_code=404, detail="Integration or account not found")
+  return {"ok": True}
+
+@app.delete("/api/admin/ilgforms/accounts/{account_id}", dependencies=[Depends(ip_allowlist)])
+def ilgforms_unlink_account(account_id: str, _admin: dict = Depends(require_super_admin)):
+  """Unlink: the account stops syncing and is removed from the forms' account list. Its data is untouched."""
+  if not ilgforms_admin.unlink_account(account_id):
+    raise HTTPException(status_code=404, detail="That account is not linked")
+  return {"ok": True}
 
 @app.post("/api/admin/ilgforms/retry", dependencies=[Depends(ip_allowlist)])
 def ilgforms_retry(body: dict = Body(default={}), _admin: dict = Depends(require_super_admin)):

@@ -175,14 +175,64 @@ const DIRECTION_LABEL = { received: 'Received', sent: 'Sent', updated: 'Updated'
     }
   }
 
+  // ---------- accounts ----------
+  const LIST_STATUS = { synced: ['In the account list', 'success'], pending: ['Waiting to be added', 'pending'], not_synced: ['Not in the account list', 'failed'] };
+  async function loadAccounts() {
+    const el = $('accountsBody');
+    el.innerHTML = '<p class="small">Loading…</p>';
+    try {
+      const data = await api('/api/admin/ilgforms/integrations');
+      const options = data.unlinked_accounts.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join('');
+      el.innerHTML = data.integrations.map(i => `
+        <div class="card sync-integration">
+          <div class="sync-integration-head"><strong>${escapeHtml(i.name)}</strong>
+            <span class="small">company ${escapeHtml(String(i.company_id))} · list <code>${escapeHtml(i.account_datasource)}</code>${i.enabled ? '' : ' · disabled'} ·
+            new rows in the list ${i.accept_new_accounts ? 'create accounts here' : 'are ignored'}</span></div>
+          <table class="audit-table"><thead><tr><th>Account</th><th>Id</th><th>ILG Forms account list</th><th></th></tr></thead><tbody>
+            ${i.accounts.map(a => { const st = LIST_STATUS[a.list_status] || LIST_STATUS.not_synced; return `
+              <tr><td>${escapeHtml(a.name)}</td><td class="audit-path">${escapeHtml(a.id)}</td>
+                  <td><span class="sync-result sync-result--${st[1]}">${st[0]}</span>${a.list_checked_at ? ` <span class="small">checked ${escapeHtml(fmt(a.list_checked_at))}</span>` : ''}</td>
+                  <td class="sync-actions"><button class="btn" data-unlink="${escapeHtml(a.id)}" data-name="${escapeHtml(a.name)}">Unlink</button></td></tr>`; }).join('')
+              || '<tr><td colspan="4" class="small">No accounts linked yet.</td></tr>'}
+          </tbody></table>
+          <div class="sync-link-row">
+            <select data-link-select="${escapeHtml(i.id)}"><option value="">Link another account…</option>${options}</select>
+            <button class="btn" data-link="${escapeHtml(i.id)}">Link</button>
+          </div>
+        </div>`).join('') || '<p class="small">No ILG Forms integration is configured yet.</p>';
+    } catch (err) {
+      el.innerHTML = '<p class="small">Failed to load accounts.</p>';
+      notifyError(err.message || 'Failed to load accounts');
+    }
+  }
+
+  $('accountsBody').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button'); if (!btn) return;
+    try {
+      if (btn.dataset.link) {
+        const select = document.querySelector(`select[data-link-select="${btn.dataset.link}"]`);
+        if (!select.value) { notifyInfo('Choose an account to link first.'); return; }
+        await api(`/api/admin/ilgforms/integrations/${encodeURIComponent(btn.dataset.link)}/accounts`, { method: 'POST', body: JSON.stringify({ account_id: select.value }) });
+        notifySuccess('Account linked. It will be added to the ILG Forms account list shortly.');
+      } else if (btn.dataset.unlink) {
+        const ok = await confirmDialog(`"${btn.dataset.name}" will stop syncing and be removed from the ILG Forms account list, so forms can no longer choose it. Its incidents and items on this platform are not touched.`, { title: 'Unlink this account?', confirmLabel: 'Unlink' });
+        if (!ok) return;
+        await api(`/api/admin/ilgforms/accounts/${encodeURIComponent(btn.dataset.unlink)}`, { method: 'DELETE' });
+        notifySuccess('Account unlinked.');
+      }
+      await Promise.all([loadAccounts(), loadSummary()]);
+    } catch (err) { notifyError(err.message || 'That did not work'); }
+  });
+
   // ---------- tabs + controls ----------
   function showTab(next) {
     tab = next; offset = 0;
     document.querySelectorAll('.sync-tab').forEach(b => b.classList.toggle('is-active', b.dataset.tab === tab));
-    $('logPanel').classList.toggle('hidden', tab === 'orphans');
+    $('logPanel').classList.toggle('hidden', tab === 'orphans' || tab === 'accounts');
     $('orphanPanel').classList.toggle('hidden', tab !== 'orphans');
+    $('accountsPanel').classList.toggle('hidden', tab !== 'accounts');
     ['filterDirection', 'filterResult'].forEach(id => { $(id).disabled = tab === 'failed'; });
-    if (tab === 'orphans') loadOrphans(); else loadLog();
+    if (tab === 'orphans') loadOrphans(); else if (tab === 'accounts') loadAccounts(); else loadLog();
   }
   document.querySelectorAll('.sync-tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
 
@@ -194,7 +244,7 @@ const DIRECTION_LABEL = { received: 'Received', sent: 'Sent', updated: 'Updated'
   });
   $('pagePrev').addEventListener('click', () => { offset = Math.max(0, offset - PAGE_SIZE); loadLog(); });
   $('pageNext').addEventListener('click', () => { offset += PAGE_SIZE; loadLog(); });
-  $('refreshBtn').addEventListener('click', () => { loadSummary(); if (tab === 'orphans') loadOrphans(); else loadLog(); });
+  $('refreshBtn').addEventListener('click', () => { loadSummary(); if (tab === 'orphans') loadOrphans(); else if (tab === 'accounts') loadAccounts(); else loadLog(); });
 
   $('retryAllBtn').addEventListener('click', async () => {
     const ok = await confirmDialog('Every failed itemId writeback goes back in the queue and is sent to ILG Forms again.', { title: 'Retry all failed writebacks?', confirmLabel: 'Retry all', danger: false });

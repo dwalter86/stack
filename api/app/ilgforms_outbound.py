@@ -422,3 +422,66 @@ def section_deleting(account_id: str, slug: str):
                payload={"row_ids": [link[0]]}, direction="sent", event="incident.delete",
                summary=f"Incident {section['label']}: removal queued for {integ['incident']}", section=section, row_id=slug)
     db.commit()
+
+
+# --- accounts <-> the ILG Forms account list ---------------------------------------------------------
+
+ACCOUNT_KEY_COLUMN = "Answer Value"
+ACCOUNT_NAME_COLUMN = "Display Text"
+
+
+def _account_integration(db, account_id: str) -> dict | None:
+  row = db.execute(text("""
+    SELECT i.id::text, i.account_datasource, i.name FROM ilgforms_integration_accounts ia
+    JOIN ilgforms_integrations i ON i.id = ia.integration_id WHERE ia.account_id = :a AND i.enabled LIMIT 1
+  """), {"a": account_id}).first()
+  return {"id": row[0], "accounts": row[1], "name": row[2]} if row else None
+
+
+def account_linked(account_id: str):
+  """The account now belongs to an integration: add it to the forms' account pick list
+  (the runner skips the insert if the list already has a row for this id)."""
+  with SessionLocal() as db:
+    integ = _account_integration(db, account_id)
+    if not integ:
+      return
+    name = db.execute(text("SELECT name FROM accounts WHERE id = :a"), {"a": account_id}).scalar() or ""
+    _enqueue(db, integ, account_id, kind=JOB_INSERT_ROW, datasource=integ["accounts"],
+             payload={"values": {ACCOUNT_KEY_COLUMN: account_id, ACCOUNT_NAME_COLUMN: name}, "unique_key": True},
+             direction="sent", event="account.insert", summary=f"Account {name}: queued for {integ['accounts']}",
+             section=None, row_id=account_id)
+    db.commit()
+
+
+def account_renamed(account_id: str):
+  with SessionLocal() as db:
+    integ = _account_integration(db, account_id)
+    if not integ:
+      return
+    name = db.execute(text("SELECT name FROM accounts WHERE id = :a"), {"a": account_id}).scalar() or ""
+    db.execute(text("""
+      DELETE FROM ilgforms_jobs WHERE account_id = :a AND datasource = :ds AND kind = :k AND status = 'pending'
+    """), {"a": account_id, "ds": integ["accounts"], "k": JOB_UPDATE_ROW})
+    _enqueue(db, integ, account_id, kind=JOB_UPDATE_ROW, datasource=integ["accounts"],
+             payload={"row_id": account_id, "columns": {ACCOUNT_NAME_COLUMN: name}}, direction="updated",
+             event="account.update", summary=f"Account {name}: new name queued for {integ['accounts']}",
+             section=None, row_id=account_id)
+    db.commit()
+
+
+def account_removed(account_id: str):
+  """Call BEFORE the account (or its link) is deleted: takes it out of the forms' pick list."""
+  with SessionLocal() as db:
+    integ = _account_integration(db, account_id)
+    if not integ:
+      return
+    name = db.execute(text("SELECT name FROM accounts WHERE id = :a"), {"a": account_id}).scalar() or account_id
+    never_sent = db.execute(text("""
+      DELETE FROM ilgforms_jobs WHERE account_id = :a AND datasource = :ds AND kind = :k AND status = 'pending' RETURNING id
+    """), {"a": account_id, "ds": integ["accounts"], "k": JOB_INSERT_ROW}).all()
+    db.execute(text("DELETE FROM ilgforms_jobs WHERE account_id = :a AND status = 'pending'"), {"a": account_id})
+    if not never_sent:
+      _enqueue(db, integ, account_id, kind=JOB_DELETE_ROWS, datasource=integ["accounts"],
+               payload={"row_ids": [account_id]}, direction="sent", event="account.delete",
+               summary=f"Account {name}: removal queued for {integ['accounts']}", section=None, row_id=account_id)
+    db.commit()

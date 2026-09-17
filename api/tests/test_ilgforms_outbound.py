@@ -191,3 +191,22 @@ class PropertyInsertPlanTests(unittest.TestCase):
   def test_no_house_number_never_matches(self):
     reuse = dict(self.REUSE, house="")
     self.assertEqual(jobs.plan_property_insert([{"ID": "R1", "incdId": "INC1", "houseNo": "", "itemId": ""}], reuse, "ID")["action"], "insert")
+
+
+@unittest.skipUnless(HAVE_DEPS, "needs the API image (httpx, sqlalchemy)")
+class AccountListPlanTests(unittest.TestCase):
+  A, B, NEW = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+
+  def test_listed_missing_and_new(self):
+    rows = [{"Answer Value": self.A.upper(), "Display Text": "Alpha"},
+            {"Answer Value": self.NEW, "Display Text": "Brand New"},
+            {"Answer Value": "not-an-id", "Display Text": "Typed by hand"},
+            {"Answer Value": "dddddddd-dddd-4ddd-8ddd-dddddddddddd", "Display Text": ""}]
+    plan = jobs.plan_accounts(rows, linked={self.A, self.B}, existing={self.A, self.B})
+    self.assertEqual(plan["listed"], {self.A})
+    self.assertEqual(plan["missing"], {self.B})
+    self.assertEqual(plan["new"], [(self.NEW, "Brand New")])   # needs a real id AND a name
+
+  def test_an_account_that_exists_but_is_not_linked_is_not_new(self):
+    plan = jobs.plan_accounts([{"Answer Value": self.B, "Display Text": "Other customer"}], linked={self.A}, existing={self.A, self.B})
+    self.assertEqual(plan["new"], [])

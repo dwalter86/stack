@@ -1203,3 +1203,9 @@ tr[data-slot] .audit-details pre { margin: 8px; }
 .doc-table th { font-size: 12px; color: var(--muted); font-weight: 600; }
 .doc-url { word-break: break-all; }
 .doc-pre { background: #1e1e1e; color: #e6e6e6; border-radius: 6px; padding: 12px 14px; font-size: 12.5px; line-height: 1.5; overflow-x: auto; margin: 0 0 10px; }
+
+.sync-integration { margin-bottom: 14px; }
+.sync-integration-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; margin-bottom: 8px; }
+.sync-link-row { display: flex; gap: 8px; margin-top: 10px; }
+.sync-link-row select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font: inherit; min-width: 240px; }
+.sync-integration .sync-result { text-transform: none; }

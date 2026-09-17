@@ -1,5 +1,5 @@
 import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences, escapeHtml } from './common.js';
-import { notifySuccess, notifyError, notifyWarning, promptDialog } from './notify.js';
+import { notifySuccess, notifyError, notifyWarning, promptDialog, confirmDialog } from './notify.js';
 (async () => {
   const me = await loadMeOrRedirect(); if (!me) return;
   renderShell(me);
@@ -117,14 +117,36 @@ import { notifySuccess, notifyError, notifyWarning, promptDialog } from './notif
       const trimmed = name.trim();
       if (!trimmed) return;
       try {
-        await api('/api/accounts', { method: 'POST', body: JSON.stringify({ name: trimmed }) });
+        const created = await api('/api/accounts', { method: 'POST', body: JSON.stringify({ name: trimmed }) });
         await loadAccounts();
         notifySuccess(`Account "${trimmed}" created.`);
+        await offerIlgFormsLink(created, trimmed);
       } catch (err) {
         notifyError(err.message || 'Failed to create account');
       }
     }
   });
+  }
+
+  // A new account is only added to an ILG Forms account list when someone says so: the list feeds
+  // that customer's forms, so other customers' accounts must never land in it.
+  async function offerIlgFormsLink(created, name) {
+    if (!created || !created.id || me.user_type !== 'super_admin') return;
+    try {
+      const data = await api('/api/admin/ilgforms/integrations');
+      for (const integration of (data.integrations || []).filter(i => i.enabled)) {
+        const yes = await confirmDialog(
+          `Sync "${name}" with ILG Forms (${integration.name})? It will be added to that company's account list so forms can choose it, and its incidents and items will sync.`,
+          { title: 'Link to ILG Forms?', confirmLabel: 'Link account', cancelLabel: 'Not now', danger: false });
+        if (yes) {
+          await api(`/api/admin/ilgforms/integrations/${encodeURIComponent(integration.id)}/accounts`, { method: 'POST', body: JSON.stringify({ account_id: created.id }) });
+          notifySuccess(`"${name}" linked to ${integration.name}.`);
+          return;
+        }
+      }
+    } catch (err) {
+      notifyError(err.message || 'Could not link the account to ILG Forms');
+    }
   }
 
   await loadAccounts();

@@ -40,7 +40,8 @@ def outbound_enabled() -> bool:
 def _integration(db, integration_id: str) -> dict | None:
   row = db.execute(text("""
     SELECT id::text, name, company_id, integration_key, main_datasource, item_id_column,
-           row_id_column, account_id_column, enabled, device_datasource, incident_datasource
+           row_id_column, account_id_column, enabled, device_datasource, incident_datasource,
+           account_datasource, accept_new_accounts
     FROM ilgforms_integrations WHERE id = :i
   """), {"i": integration_id}).first()
   if not row:
@@ -48,7 +49,7 @@ def _integration(db, integration_id: str) -> dict | None:
   return {"id": row[0], "name": row[1], "company_id": row[2], "integration_key": row[3],
           "main_datasource": row[4], "item_id_column": row[5], "row_id_column": row[6],
           "account_id_column": row[7], "enabled": row[8], "device_datasource": row[9],
-          "incident_datasource": row[10]}
+          "incident_datasource": row[10], "account_datasource": row[11], "accept_new_accounts": row[12]}
 
 
 def _client(integration: dict, transport=None) -> IlgFormsClient:
@@ -191,8 +192,15 @@ def run_job(job: dict, integration: dict, transport=None) -> str:
         headers = _headers(client, integration["id"], payload["external_id"])
         # Only send columns the datasource really has (layouts differ slightly between companies).
         values = {k: v for k, v in payload["values"].items() if k in headers}
-        decision = plan_property_insert(client.get_rows(payload["external_id"]), payload["reuse"], headers[0]) \
-          if payload.get("reuse") else {"action": "insert"}
+        if payload.get("reuse"):
+          decision = plan_property_insert(client.get_rows(payload["external_id"]), payload["reuse"], headers[0])
+        elif payload.get("unique_key"):
+          # e.g. the account list: someone may already have typed this id in by hand
+          key = str(values.get(headers[0]) or "").strip().lower()
+          exists = any(str(r.get(headers[0]) or "").strip().lower() == key for r in client.get_rows(payload["external_id"]))
+          decision = {"action": "present", "row_id": values.get(headers[0])} if exists else {"action": "insert"}
+        else:
+          decision = {"action": "insert"}
         if decision["action"] == "insert":
           client.insert_row(payload["external_id"], values, headers=headers)
         elif decision["action"] == "reuse":
@@ -301,6 +309,66 @@ def plan_reconcile(rows: list[dict], *, item_id_column: str, row_id_column: str,
   return {"synced": synced, "orphans": orphans}
 
 
+UUID_RE = __import__("re").compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+MAX_NEW_ACCOUNTS_PER_PASS = 5
+
+
+def plan_accounts(rows: list[dict], linked: set[str], existing: set[str]) -> dict:
+  """Pure: compare the forms' account pick list with the platform.
+    listed  -- linked accounts that have a row
+    missing -- linked accounts with no row
+    new     -- rows with a valid id the platform has no account for: [(id, name)]
+  """
+  by_id = {}
+  for row in rows:
+    key = str(row.get("Answer Value") or "").strip().lower()
+    if key:
+      by_id.setdefault(key, str(row.get("Display Text") or "").strip())
+  new = [(k, name) for k, name in by_id.items() if UUID_RE.match(k) and k not in existing and name]
+  return {"listed": linked & set(by_id), "missing": linked - set(by_id), "new": new}
+
+
+def _reconcile_accounts(integration: dict, linked_accounts: list[str], rows: list[dict]) -> list[str]:
+  """Record which linked accounts are in the list. When the integration accepts new accounts,
+  a row whose id the platform does not know becomes a platform account with that id."""
+  with SessionLocal() as db:
+    existing = {r[0] for r in db.execute(text("SELECT id::text FROM accounts")).all()}
+    plan = plan_accounts(rows, set(linked_accounts), existing)
+    db.execute(text("""
+      UPDATE ilgforms_integration_accounts
+      SET list_status = CASE WHEN account_id::text = ANY(:listed) THEN 'synced'
+                             WHEN list_status = 'pending' AND EXISTS (SELECT 1 FROM ilgforms_jobs j
+                                  WHERE j.account_id = ilgforms_integration_accounts.account_id AND j.datasource = :ds
+                                    AND j.status IN ('pending', 'running')) THEN 'pending'
+                             ELSE 'not_synced' END,
+          list_checked_at = now()
+      WHERE integration_id = :i
+    """), {"listed": list(plan["listed"]), "ds": integration["account_datasource"], "i": integration["id"]})
+    created = []
+    if integration.get("accept_new_accounts"):
+      for account_id, name in plan["new"][:MAX_NEW_ACCOUNTS_PER_PASS]:
+        db.execute(text("INSERT INTO accounts(id, name) VALUES (:id, :n) ON CONFLICT (id) DO NOTHING"),
+                   {"id": account_id, "n": name})
+        rls.create_tenant_schema(db, account_id)
+        db.execute(text("""
+          INSERT INTO ilgforms_integration_accounts (integration_id, account_id, list_status, list_checked_at)
+          VALUES (:i, :a, 'synced', now()) ON CONFLICT (account_id) DO NOTHING
+        """), {"i": integration["id"], "a": account_id})
+        # Nobody chose who may see it: give it to super admins, who can share it from Settings > Users.
+        db.execute(text("""
+          INSERT INTO memberships(user_id, account_id, role)
+          SELECT u.id, :a, 'owner' FROM users u WHERE u.user_type = 'super_admin' ON CONFLICT DO NOTHING
+        """), {"a": account_id})
+        _log(db, integration_id=integration["id"], account_id=account_id, direction="received",
+             event="account.created", result="success", row_id=account_id,
+             summary=f"Account {name}: created from a new row in {integration['account_datasource']} (visible to super admins)")
+        created.append(account_id)
+    elif plan["new"]:
+      pass  # listed for information on the sync page; nothing is created unless accept_new_accounts is on
+    db.commit()
+  return linked_accounts + created
+
+
 def _datasource_specs(integration: dict) -> list[dict]:
   """Where each datasource keeps its row key, the Stack item id, and the account id."""
   return [
@@ -326,6 +394,12 @@ def reconcile(integration_id: str, transport=None) -> dict:
   with _client(integration, transport) as client:
     sheets = {spec["name"]: client.get_rows(spec["name"]) for spec in specs}
     incident_rows = client.get_rows(integration["incident_datasource"])
+    try:
+      account_rows = client.get_rows(integration["account_datasource"])
+    except IlgFormsError:
+      account_rows = None   # this company has no account list: nothing to check
+  if account_rows is not None:
+    accounts = _reconcile_accounts(integration, accounts, account_rows)
 
   account_items: dict[str, set[str]] = {}
   for account_id in accounts:
