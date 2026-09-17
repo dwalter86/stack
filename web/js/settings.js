@@ -21,6 +21,8 @@ import { loadMeOrRedirect, renderShell, getLabels } from './common.js';
   ];
   if (me.user_type === 'super_admin') {
     sections.push({ key:'audit-log', label:'Audit log', description:'Full history of changes and login attempts across the platform.', href:'/audit-log.html' });
+    sections.push({ key:'ilgforms-callbacks', label:'ILG Forms callbacks', description:'The addresses ILG Forms calls when a form is submitted, what to send, and what comes back.', href:'/ilgforms-callbacks.html' });
+    sections.push({ key:'ilgforms-sync', label:'ILG Forms sync', description:'Everything received from, sent to, and updated with ILG Forms, with failures and retries.', href:'/ilgforms-sync.html' });
   }
 
   list.innerHTML = sections.map(section => `

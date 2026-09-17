@@ -144,6 +144,51 @@ def ensure_section_notes_table(account_id: str):
     db.execute(text(sql))
     db.commit()
 
+ITEM_SYNC_TABLE_SQL = """
+  CREATE TABLE IF NOT EXISTS {schema}.item_sync (
+    item_id UUID NOT NULL REFERENCES {schema}.items(id) ON DELETE CASCADE,
+    datasource TEXT NOT NULL,
+    row_id TEXT,
+    status TEXT NOT NULL DEFAULT 'not_synced',
+    last_checked_at TIMESTAMPTZ,
+    last_synced_at TIMESTAMPTZ,
+    last_error TEXT,
+    PRIMARY KEY (item_id, datasource)
+  )
+"""
+
+_item_sync_ready: set[str] = set()
+
+def ensure_item_sync_table(account_id: str):
+  """ILG Forms sync state per item and datasource (an item can be linked to a
+  property row and to an appliance row). Kept out of items.data so it never
+  leaks into exports or gets overwritten by an edit."""
+  schema = _schema_name(account_id)
+  if schema in _item_sync_ready:
+    return
+  with SessionLocal() as db:
+    db.execute(set_current_account(account_id))
+    db.execute(text(ITEM_SYNC_TABLE_SQL.format(schema=schema)))
+    # Early builds keyed the table on item_id alone: widen it in place.
+    pk_cols = db.execute(text("""
+      SELECT count(*) FROM information_schema.key_column_usage
+      WHERE table_schema = :s AND table_name = 'item_sync' AND constraint_name = 'item_sync_pkey'
+    """), {"s": schema}).scalar()
+    if pk_cols == 1:
+      db.execute(text(f"UPDATE {schema}.item_sync SET datasource = 'nfmain' WHERE datasource IS NULL"))
+      db.execute(text(f"ALTER TABLE {schema}.item_sync ALTER COLUMN datasource SET NOT NULL"))
+      db.execute(text(f"ALTER TABLE {schema}.item_sync DROP CONSTRAINT item_sync_pkey"))
+      db.execute(text(f"ALTER TABLE {schema}.item_sync ADD PRIMARY KEY (item_id, datasource)"))
+    db.execute(text(f"ALTER TABLE {schema}.item_sync ENABLE ROW LEVEL SECURITY"))
+    exists = db.execute(text("""
+      SELECT 1 FROM pg_policies
+      WHERE schemaname = :s AND tablename = 'item_sync' AND policyname = 'item_sync_tenant_policy'
+    """), {"s": schema}).first()
+    if not exists:
+      db.execute(text(f"CREATE POLICY item_sync_tenant_policy ON {schema}.item_sync USING (true)"))
+    db.commit()
+  _item_sync_ready.add(schema)
+
 def list_section_notes(account_id: str, section_slug: str):
   schema = _schema_name(account_id)
   sql = f"""

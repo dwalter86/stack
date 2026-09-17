@@ -1,5 +1,6 @@
 import { loadMeOrRedirect, renderShell, api, getLabels, getPreferences, escapeHtml, getToken } from './common.js';
 import { notifySuccess, notifyError, notifyWarning, confirmDialog } from './notify.js';
+import { syncIconHtml } from './sync-icon.js';
 
 function qs(name) {
   const m = new URLSearchParams(location.search).get(name);
@@ -435,6 +436,9 @@ function saveItemZoom(accountId, slug, zoomPercent) {
   const templateFromPrefs = parseTemplate(loadColumnTemplate(accountId, slug));
   let schemaFields = templateFromPrefs.fields || [];
   let itemsData = [];
+  // ILG Forms sync: only accounts with an integration get the column.
+  let syncEnabled = false;
+  let syncStates = {};
   let currentVisibleItems = [];
   const selectedItemIds = new Set();
   let columnDefs = [];
@@ -1249,6 +1253,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
         `<input type="checkbox" data-item-select data-item-id="${escapeHtml(it.id)}"${selectedItemIds.has(it.id) ? ' checked' : ''} aria-label="Select ${escapeHtml(it.name || 'item')}" />` +
         `</td>`
       );
+      if (syncEnabled) cells.push(`<td class="sync-cell">${syncIconHtml(syncStates[it.id])}</td>`);
       for (const col of activeColumns) {
         if (col.key === 'name') {
           cells.push(`<td>${escapeHtml(it.name)}</td>`);
@@ -1293,7 +1298,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
       return `<tr class="${rowStatusClass}">${cells.join('')}</tr>`;
     }).join('');
 
-    itemsTableContainer.innerHTML = `<div class="table-wrapper"><table><thead><tr><th style="width:1%;white-space:nowrap;"><input type="checkbox" id="selectAllVisibleItems"${allVisibleSelected ? ' checked' : ''} aria-label="Select all visible items" /></th>${headerCells}<th></th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+    itemsTableContainer.innerHTML = `<div class="table-wrapper"><table><thead><tr><th style="width:1%;white-space:nowrap;"><input type="checkbox" id="selectAllVisibleItems"${allVisibleSelected ? ' checked' : ''} aria-label="Select all visible items" /></th>${syncEnabled ? '<th class="sync-cell" title="Synced with ILG Forms">Sync</th>' : ''}${headerCells}<th></th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
     const headerButtons = itemsTableContainer.querySelectorAll('.sort-toggle');
     headerButtons.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1405,8 +1410,13 @@ function saveItemZoom(accountId, slug, zoomPercent) {
 
   async function loadItems() {
     try {
-      const page = await api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}/items?limit=200`);
+      const [page, sync] = await Promise.all([
+        api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}/items?limit=200`),
+        api(`/api/accounts/${accountId}/sections/${encodeURIComponent(slug)}/sync-status`).catch(() => null),
+      ]);
       itemsData = page.items || [];
+      syncEnabled = !!(sync && sync.enabled);
+      syncStates = (sync && sync.items) || {};
       const itemIds = new Set(itemsData.map(item => item.id));
       for (const selectedId of Array.from(selectedItemIds)) {
         if (!itemIds.has(selectedId)) {
@@ -1487,8 +1497,8 @@ function saveItemZoom(accountId, slug, zoomPercent) {
         body: JSON.stringify({ name, data })
       });
       const sectionName = (currentSection && currentSection.label) ? currentSection.label : slug;
-      // Fire-and-forget webhook with new item details
-      try {
+      // Legacy n8n webhook: only for accounts without native ILG Forms sync (the API pushes those itself).
+      if (!syncEnabled) try {
         fetch('https://n8n.adigi8.app/webhook/415312f7-a131-40cc-b86b-d9e51604a99e', {
           method: 'POST',
           headers: {

@@ -45,6 +45,9 @@ export function getLabels(user) {
 
 export async function api(path, opts = {}) {
   const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+  // Every change made in the web platform says so: the API pushes those (and only those) to ILG Forms.
+  const method = (opts.method || 'GET').toUpperCase();
+  if (method !== 'GET' && !headers['X-Update-Source']) headers['X-Update-Source'] = 'web-ui';
   const token = getToken();
   if (token) headers.Authorization = 'Bearer ' + token;
   const res = await fetch(path, Object.assign({}, opts, { headers }));

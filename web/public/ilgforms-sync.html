@@ -1,0 +1,84 @@
+<!doctype html><html><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ILG Forms sync</title>
+  <link rel="stylesheet" href="/app.css">
+</head><body>
+  <header id="site-header"></header>
+  <main class="page-container" data-disable-auto-update="true">
+    <div class="account-header">
+      <div class="account-header-main">
+        <a class="btnBack" href="/settings.html" title="Back to Settings">Back to Settings</a>
+        <div>
+          <div class="page-eyebrow">Settings</div>
+          <h1>ILG Forms sync</h1>
+        </div>
+      </div>
+      <div class="account-header-actions">
+        <button class="btn" id="reconcileBtn" title="Read the ILG Forms datasource now and refresh every item's sync status">Check ILG Forms now</button>
+        <button class="btn" id="refreshBtn" title="Reload this page's data">Refresh</button>
+      </div>
+    </div>
+
+    <div id="outboundBanner" class="sync-banner hidden"></div>
+    <div id="summaryStrip" class="sync-summary"></div>
+    <div id="accountStrip" class="sync-accounts"></div>
+
+    <div class="sync-tabs" role="tablist">
+      <button class="sync-tab is-active" role="tab" data-tab="activity">Activity</button>
+      <button class="sync-tab" role="tab" data-tab="failed">Failed <span class="sync-tab-count" id="failedCount"></span></button>
+      <button class="sync-tab" role="tab" data-tab="orphans">Orphan rows <span class="sync-tab-count" id="orphanCount"></span></button>
+    </div>
+
+    <section id="logPanel">
+      <div class="card audit-filters" id="logFilters">
+        <select id="filterAccount"><option value="">All accounts</option></select>
+        <select id="filterDirection">
+          <option value="">Any direction</option>
+          <option value="received">Received</option>
+          <option value="sent">Sent</option>
+          <option value="updated">Updated</option>
+        </select>
+        <select id="filterResult">
+          <option value="">Any result</option>
+          <option value="success">Success</option>
+          <option value="pending">Pending</option>
+          <option value="retrying">Retrying</option>
+          <option value="failed">Failed</option>
+          <option value="skipped">Skipped</option>
+        </select>
+        <input type="date" id="filterFrom" title="From date">
+        <input type="date" id="filterTo" title="To date">
+        <input type="text" id="filterSearch" placeholder="Search incident, house, row id, item id…">
+        <button class="btn" id="applyFilters">Apply</button>
+        <button class="btn" id="clearFilters">Clear</button>
+        <button class="btn hidden" id="retryAllBtn">Retry all failed</button>
+      </div>
+
+      <div id="logMeta" class="small"></div>
+      <div class="audit-table-wrap">
+        <table class="audit-table sync-table">
+          <thead>
+            <tr><th>Time</th><th>Direction</th><th>Account</th><th>Incident</th><th>What happened</th><th>Result</th><th></th></tr>
+          </thead>
+          <tbody id="logRows"></tbody>
+        </table>
+      </div>
+      <div class="audit-pager">
+        <button class="btn" id="pagePrev">&larr; Newer</button>
+        <span id="pageInfo" class="small"></span>
+        <button class="btn" id="pageNext">Older &rarr;</button>
+      </div>
+    </section>
+
+    <section id="orphanPanel" class="hidden">
+      <p class="small">Rows in the ILG Forms datasources whose item id matches nothing in this platform, usually because the item was deleted. They are listed for information only and are never changed automatically.</p>
+      <div class="audit-table-wrap">
+        <table class="audit-table">
+          <thead><tr><th>Sheet</th><th>Account</th><th>Incident</th><th>House</th><th>Detail</th><th>Row id</th><th>Missing item id</th><th>First seen</th></tr></thead>
+          <tbody id="orphanRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/js/ilgforms-sync.js"></script>
+</body></html>

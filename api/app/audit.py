@@ -9,6 +9,7 @@ a failure to write must never break the actual request.
 import json
 import re
 import traceback
+from urllib.parse import parse_qsl, urlencode
 
 from jose import jwt, JWTError
 from sqlalchemy import text
@@ -18,7 +19,7 @@ from deps import JWT_SECRET
 
 MAX_BODY_CHARS = 10_000
 REDACTED = "[redacted]"
-SENSITIVE_KEY_RE = re.compile(r"password|secret|token", re.IGNORECASE)
+SENSITIVE_KEY_RE = re.compile(r"password|secret|token|integrationkey|api[_-]?key", re.IGNORECASE)
 
 # Read-only usage worth recording. GETs not matching these are not logged
 # (login/session chatter like /api/me would be pure noise). First match wins.
@@ -56,6 +57,11 @@ ACTION_RULES = [
   ("PUT",    r"^/api/admin/users/[^/]+$",                        "user.update"),
   ("DELETE", r"^/api/admin/users/[^/]+$",                        "user.delete"),
   ("PUT",    r"^/api/me/preferences$",                           "preferences.update"),
+  ("POST",   r"^/api/integrations/ilgforms/incident$",           "ilgforms.incident"),
+  ("POST",   r"^/api/integrations/ilgforms/devices$",            "ilgforms.devices"),
+  ("POST",   r"^/api/integrations/ilgforms/engineer-update$",    "ilgforms.engineer_update"),
+  ("POST",   r"^/api/admin/ilgforms/retry$",                     "ilgforms.retry"),
+  ("POST",   r"^/api/admin/ilgforms/reconcile$",                 "ilgforms.reconcile"),
 ]
 
 ACCOUNT_ID_RE = re.compile(r"^/api/accounts/([0-9a-f-]{36})(/|$)")
@@ -86,6 +92,27 @@ def redact(value):
   if isinstance(value, list):
     return [redact(v) for v in value]
   return value
+
+
+def redact_query(query: str) -> str:
+  """Query strings can carry integration keys (ILG Forms webhook URLs do)."""
+  try:
+    pairs = parse_qsl(query, keep_blank_values=True)
+  except ValueError:
+    return REDACTED
+  return urlencode([(k, REDACTED if SENSITIVE_KEY_RE.search(k) else v) for k, v in pairs])
+
+
+def account_from_integration_body(raw: bytes) -> str | None:
+  """Inbound ILG Forms calls name their target account in the body, not the path."""
+  try:
+    answers = json.loads(raw.decode("utf-8", errors="replace"))["Entry"]["AnswersJson"]
+    page1 = answers.get("page1") or {}
+    account = page1.get("account") or page1.get("accountid") or (answers.get("deviceReview") or {}).get("systemAccountID")
+  except (ValueError, KeyError, TypeError, AttributeError):
+    return None
+  account = str(account or "").strip().lower()
+  return account if UUID_RE.match(account) else None
 
 
 def summarize_body(raw: bytes, content_type: str, keep_sensitive: bool = False):
@@ -226,11 +253,13 @@ class AuditMiddleware:
 
       account_match = ACCOUNT_ID_RE.match(path)
       account_id = account_match.group(1) if account_match and UUID_RE.match(account_match.group(1)) else None
+      if not account_id and path.startswith("/api/integrations/ilgforms/"):
+        account_id = account_from_integration_body(raw_body)
 
       query = scope.get("query_string", b"").decode()
       if query:
         details = details if isinstance(details, dict) else {}
-        details["_query"] = query
+        details["_query"] = redact_query(query)
 
       write_audit(
         user_id=user_id,

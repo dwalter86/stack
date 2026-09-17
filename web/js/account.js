@@ -346,8 +346,9 @@ function renderStatusText(label, count) {
         method: 'POST',
         body: JSON.stringify({ slug, label: label || slug, detail, schema: {} })
       });
-      // Fire-and-forget webhook with new section details
-      try {
+      // Legacy n8n webhook: only for accounts without native ILG Forms sync (the API pushes those itself).
+      const nativeSync = await api(`/api/accounts/${accountId}/integrations`).then(r => !!(r && r.ilgforms)).catch(() => false);
+      if (!nativeSync) try {
         fetch('https://n8n.adigi8.app/webhook/4e02f681-fdf6-4dea-a4c8-77dca1d54a5a', {
           method: 'POST',
           headers: {

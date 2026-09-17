@@ -1,0 +1,170 @@
+<!doctype html><html><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ILG Forms callbacks</title>
+  <link rel="stylesheet" href="/app.css">
+</head><body>
+  <header id="site-header"></header>
+  <main class="page-container doc-page" data-disable-auto-update="true">
+    <div class="account-header">
+      <div class="account-header-main">
+        <a class="btnBack" href="/settings.html" title="Back to Settings">Back to Settings</a>
+        <div>
+          <div class="page-eyebrow">Settings</div>
+          <h1>ILG Forms callbacks</h1>
+        </div>
+      </div>
+      <div class="account-header-actions"><a class="btn" href="/ilgforms-sync.html">Open sync log</a></div>
+    </div>
+
+    <section class="card doc-card">
+      <h2>What these are</h2>
+      <p>Three addresses that the ILG Forms platform calls when a form is submitted. Each one replaces an n8n workflow. Set them as the REST connector URL on the matching form in ILG Forms.</p>
+      <div class="table-wrapper"><table class="doc-table">
+        <thead><tr><th>Form</th><th>Callback URL</th><th>Replaces n8n workflow</th></tr></thead>
+        <tbody>
+          <tr><td>Incident form, with its list of properties</td><td><code class="doc-url" data-path="/api/integrations/ilgforms/incident"></code></td><td>Add Incident</td></tr>
+          <tr><td>Appliance list form</td><td><code class="doc-url" data-path="/api/integrations/ilgforms/devices"></code></td><td>Items upload</td></tr>
+          <tr><td>Engineer single-appliance form</td><td><code class="doc-url" data-path="/api/integrations/ilgforms/engineer-update"></code></td><td>Engineer Job Updater</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section class="card doc-card">
+      <h2>How a call is made</h2>
+      <ul>
+        <li><strong>Method</strong> <code>POST</code>, <strong>content type</strong> <code>application/json</code>. Send the form entry as ILG Forms normally does: <code>ProviderId</code>, <code>IntegrationKey</code> and <code>Entry</code> at the top level of the body.</li>
+        <li><strong>Authentication</strong> is the <code>ProviderId</code> and <code>IntegrationKey</code> in the body. No login, token or fixed IP address is needed. The key is checked against the integration set up on this platform, and the call may only touch accounts linked to that integration.</li>
+        <li><strong>Reply</strong> comes back within a second or two as JSON. Nothing is sent to ILG Forms during the call: any write back to a datasource is queued and sent moments later, with retries.</li>
+        <li><strong>Sending the same entry twice is safe.</strong> An identical body is recognised and ignored. A changed resubmission updates what exists and never creates duplicates.</li>
+      </ul>
+    </section>
+
+    <section class="card doc-card">
+      <h2>1. Incident form</h2>
+      <p>Creates the incident if it is new, then creates or updates one item per property. For each new item, the item id is written back to the <code>itemId</code> column of the property's row in the main datasource.</p>
+      <p class="small">Fields read from <code>Entry.AnswersJson.page1</code>:</p>
+      <div class="table-wrapper"><table class="doc-table">
+        <thead><tr><th>Field</th><th>Needed</th><th>Used for</th></tr></thead>
+        <tbody>
+          <tr><td><code>ID</code></td><td>Yes</td><td>Incident id. Becomes the section slug.</td></tr>
+          <tr><td><code>account</code></td><td>Yes</td><td>Account id on this platform.</td></tr>
+          <tr><td><code>incd</code>, <code>postCode</code></td><td>No</td><td>Incident name and post code, used when the incident is first created.</td></tr>
+          <tr><td><code>locations[]</code></td><td>No</td><td>One entry per property, see below.</td></tr>
+        </tbody>
+      </table></div>
+      <p class="small">Each entry in <code>locations[]</code>:</p>
+      <div class="table-wrapper"><table class="doc-table">
+        <thead><tr><th>Field</th><th>Used for</th></tr></thead>
+        <tbody>
+          <tr><td><code>uniq_up</code>, or <code>uniq</code> when it is not <code>0</code></td><td>The datasource row id. The item id is written back to this row.</td></tr>
+          <tr><td><code>itemId</code></td><td>If set, that item is updated. If blank, an existing matching item is linked, otherwise a new item is created.</td></tr>
+          <tr><td><code>customersName</code>, <code>houseNo</code>, <code>streetName</code>, <code>postCodeIn</code> / <code>postCodeOut</code>, <code>telephoneNumber1</code>, <code>telephoneNumber2</code>, <code>email</code></td><td>Item name and details. A blank value never wipes an existing one.</td></tr>
+          <tr><td><code>initialVisit</code></td><td>Item status. Only applied while the item is still at Faults, No Faults, Out or N/A, so an engineer's later status is never overwritten.</td></tr>
+        </tbody>
+      </table></div>
+<pre class="doc-pre">{
+  "ProviderId": 12345,
+  "IntegrationKey": "&lt;integration key&gt;",
+  "Entry": {
+    "Id": "0123456789abcdef0123456789abcdef",
+    "AnswersJson": { "page1": {
+      "ID": "ABCD-01012026-090000-00000001",
+      "account": "&lt;account id&gt;",
+      "incd": "100001-A Example Road",
+      "postCode": "ZZ1 1ZZ",
+      "locations": [ {
+        "uniq": "EFGH-01012026-101004-00000002", "uniq_up": "EFGH-01012026-101004-00000002",
+        "customersName": "Sample", "houseNo": "16", "streetName": "Example Road, Testville",
+        "postCodeIn": "ZZ1 1ZZ", "telephoneNumber1": "07000000000", "initialVisit": "Faults", "itemId": ""
+      } ]
+    } }
+  }
+}</pre>
+    </section>
+
+    <section class="card doc-card">
+      <h2>2. Appliance list form</h2>
+      <p>Creates or updates one item per appliance in an existing incident, adds the engineer's comment, and builds full photo links. For each new item, <code>systemID</code>, <code>systemAccountID</code> and <code>systemSectionID</code> are written back to the appliance's row in the device datasource.</p>
+      <div class="table-wrapper"><table class="doc-table">
+        <thead><tr><th>Field</th><th>Needed</th><th>Used for</th></tr></thead>
+        <tbody>
+          <tr><td><code>page1.accountid</code>, <code>page1.incdid</code></td><td>Yes</td><td>Account id and incident id. The incident must already exist.</td></tr>
+          <tr><td><code>page1.customersName</code>, <code>houseNoName</code>, <code>address</code>, <code>postCode</code>, <code>telephoneNumber1</code>, <code>dateAndTime</code></td><td>No</td><td>Customer details copied onto each appliance item.</td></tr>
+          <tr><td><code>page1.datasourceID</code></td><td>No</td><td>Device datasource name. Defaults to the one set on the integration.</td></tr>
+          <tr><td><code>deviceReview.devices[]</code></td><td>No</td><td><code>uniq_up</code> / <code>uniq</code> row id, <code>systemID</code> (blank for a new appliance), <code>make</code>, <code>model</code>, <code>serialNumber</code>, <code>applianceType</code>, <code>approxAgeYr</code>, <code>approxPurchasePrice</code>, <code>status</code> (report status), <code>repairStatus</code> (item status), <code>engineer</code>, <code>photo</code> to <code>photo4</code>, <code>comments</code>.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section class="card doc-card">
+      <h2>3. Engineer single-appliance form</h2>
+      <p>Updates one existing item and adds the engineer's comment. Reads <code>Entry.AnswersJson.deviceReview</code>.</p>
+      <div class="table-wrapper"><table class="doc-table">
+        <thead><tr><th>Field</th><th>Needed</th><th>Used for</th></tr></thead>
+        <tbody>
+          <tr><td><code>systemID</code>, <code>systemAccountID</code></td><td>Yes</td><td>The item to update and its account.</td></tr>
+          <tr><td><code>make</code>, <code>model</code>, <code>serialNumber</code>, <code>applianceType</code>, <code>approxAgeYr</code>, <code>approxPurchasePrice</code>, <code>engineer</code>, <code>photo</code></td><td>No</td><td>Appliance details. Blank values are ignored.</td></tr>
+          <tr><td><code>status</code></td><td>No</td><td>Report status.</td></tr>
+          <tr><td><code>deviceStatus</code></td><td>No</td><td>Item status. Always applied when set: the engineer's form is the authority.</td></tr>
+          <tr><td><code>comments</code></td><td>No</td><td>Saved on the item and added as a comment once.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section class="card doc-card">
+      <h2>Replies</h2>
+      <div class="table-wrapper"><table class="doc-table">
+        <thead><tr><th>Status</th><th>Meaning</th><th>What to do</th></tr></thead>
+        <tbody>
+          <tr><td><code>200</code></td><td>Processed. The body lists what happened to each property or appliance: <code>create</code>, <code>update</code>, <code>link</code> or <code>skip</code>, with a reason. <code>"duplicate": true</code> means an identical entry had already been processed.</td><td>Nothing.</td></tr>
+          <tr><td><code>400</code></td><td>A required field is missing, or the incident does not exist.</td><td>Fix the form mapping. Retrying the same body will fail again.</td></tr>
+          <tr><td><code>401</code></td><td>Unknown <code>ProviderId</code> or wrong <code>IntegrationKey</code>.</td><td>Check the key on the form's connector.</td></tr>
+          <tr><td><code>403</code></td><td>The account is not linked to this integration, or the integration is switched off.</td><td>Link the account on this platform.</td></tr>
+          <tr><td><code>422</code></td><td>The body is not valid JSON.</td><td>Check the connector's content type and body.</td></tr>
+          <tr><td><code>5xx</code></td><td>Fault on this platform. Nothing was saved.</td><td>Safe to retry.</td></tr>
+        </tbody>
+      </table></div>
+<pre class="doc-pre">{
+  "ok": true, "duplicate": false, "section": "ABCD-01012026-090000-00000001", "section_created": true,
+  "counts": { "created": 1, "updated": 0, "linked": 0, "skipped": 0, "failed": 0 },
+  "locations": [ { "index": 0, "row_id": "EFGH-01012026-101004-00000002", "action": "create",
+                   "item_id": "11111111-2222-4333-8444-555555555555", "writeback": "queued" } ]
+}</pre>
+      <p>Every call, accepted or rejected, appears in the <a href="/ilgforms-sync.html">sync log</a> with the stored body for 30 days. That is the quickest way to see why a test call did what it did.</p>
+    </section>
+
+    <section class="card doc-card">
+      <h2>Testing a callback by hand</h2>
+      <p>Save a body to <code>entry.json</code> and post it. Use a test incident id so it is easy to find and delete afterwards.</p>
+<pre class="doc-pre">curl -X POST "<span class="doc-origin"></span>/api/integrations/ilgforms/incident" \
+  -H "Content-Type: application/json" --data @entry.json</pre>
+    </section>
+
+    <section class="card doc-card">
+      <h2>The other direction</h2>
+      <p>Changes made on this platform are pushed to ILG Forms automatically. There is nothing to configure in ILG Forms for these.</p>
+      <div class="table-wrapper"><table class="doc-table">
+        <thead><tr><th>On this platform</th><th>In ILG Forms</th></tr></thead>
+        <tbody>
+          <tr><td>Create an incident</td><td>New row in the incident list datasource</td></tr>
+          <tr><td>Rename an incident or change its post code</td><td>That row is updated</td></tr>
+          <tr><td>Add an item with appliance details</td><td>New row in the device datasource</td></tr>
+          <tr><td>Add an item without appliance details</td><td>New row in the main property datasource</td></tr>
+          <tr><td>Edit an item</td><td>Its row or rows are updated</td></tr>
+          <tr><td>Delete an item</td><td>Its row or rows are removed</td></tr>
+          <tr><td>Delete an incident</td><td>The incident row and every property and appliance row under it are removed</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+  </main>
+  <script type="module">
+    import { loadMeOrRedirect, renderShell } from '/js/common.js';
+    const me = await loadMeOrRedirect();
+    if (me) {
+      renderShell(me);
+      if (me.user_type !== 'super_admin') window.location.replace('/accounts.html');
+      document.querySelectorAll('.doc-url').forEach(el => { el.textContent = window.location.origin + el.dataset.path; });
+      document.querySelectorAll('.doc-origin').forEach(el => { el.textContent = window.location.origin; });
+    }
+  </script>
+</body></html>

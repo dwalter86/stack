@@ -1,5 +1,6 @@
 import { loadMeOrRedirect, renderShell, api, getLabels, escapeHtml, getToken } from './common.js';
 import { notifySuccess, notifyError, notifyWarning } from './notify.js';
+import { syncIconHtml } from './sync-icon.js';
 
 function qs(name) {
   const m = new URLSearchParams(location.search).get(name);
@@ -668,6 +669,14 @@ function formatDateTime(val) {
     itemMetaEl.textContent = `${accountName} · id: ${itemId}${createdCopy}`;
     document.title = `${item.name} | ${labels.items_label}`;
     renderItem(item);
+    // ILG Forms sync badge (only for accounts with an integration)
+    api(`/api/accounts/${accountId}/items/${encodeURIComponent(itemId)}/sync-status`).then(sync => {
+      const badge = document.getElementById('itemSyncBadge');
+      if (badge && sync && sync.enabled) {
+        badge.innerHTML = syncIconHtml(sync.state, { withText: true });
+        badge.classList.remove('hidden');
+      }
+    }).catch(() => {});
   } catch (e) {
     itemNameEl.textContent = 'Item not found';
     itemMetaEl.textContent = e.message || 'Failed to load item.';

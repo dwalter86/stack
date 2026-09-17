@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Query, Request, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, Query, Request, UploadFile, File, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from typing import Optional
@@ -37,6 +37,11 @@ from deps import current_user, ip_allowlist, require_admin, require_editor, requ
 import rls
 import exports
 import audit
+import ilgforms_sync
+import ilgforms_jobs
+import ilgforms_admin
+import ilgforms_outbound
+import ilgforms_devices
 from sqlalchemy import text
 from database import SessionLocal
 
@@ -175,6 +180,22 @@ WEBHOOK_ITEM_UPDATED = "https://n8n.adigi8.app/webhook/af693448-f43f-493c-97af-c
 WEB_UI_UPDATE_SOURCE_HEADER = "X-Update-Source"
 WEB_UI_UPDATE_SOURCE_VALUE = "web-ui"
 
+def from_web_ui(request: Request) -> bool:
+  """Changes made in the web platform carry this header. Only those are pushed to
+  ILG Forms: calls made by other API clients (n8n during the changeover, scripts)
+  are not, so a form that already wrote its own datasource row is never doubled."""
+  return request.headers.get(WEB_UI_UPDATE_SOURCE_HEADER) == WEB_UI_UPDATE_SOURCE_VALUE
+
+
+def push_to_ilgforms(fn, *args):
+  """Queue an ILG Forms change. Best-effort: it must never fail the user's request."""
+  try:
+    fn(*args)
+  except Exception:
+    import traceback
+    traceback.print_exc()
+
+
 app = FastAPI(title="Multi-tenant JSON API")
 app.add_middleware(
   CORSMiddleware,
@@ -184,6 +205,10 @@ app.add_middleware(
   allow_headers=["*"]
 )
 app.add_middleware(audit.AuditMiddleware)
+
+@app.on_event("startup")
+def start_background_workers():
+  ilgforms_jobs.start_worker()
 
 @app.get("/api/admin/audit-log", dependencies=[Depends(ip_allowlist)])
 async def read_audit_log(
@@ -346,6 +371,24 @@ async def create_account(body: AccountCreate, user_id: str = Depends(current_use
           EXECUTE format('CREATE POLICY section_notes_tenant_policy ON %I.section_notes USING (true)', sch);
         END IF;
 
+        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.item_sync (
+          item_id UUID NOT NULL REFERENCES %I.items(id) ON DELETE CASCADE,
+          datasource TEXT NOT NULL,
+          row_id TEXT,
+          status TEXT NOT NULL DEFAULT ''not_synced'',
+          last_checked_at TIMESTAMPTZ,
+          last_synced_at TIMESTAMPTZ,
+          last_error TEXT,
+          PRIMARY KEY (item_id, datasource)
+        )', sch, sch);
+        EXECUTE format('ALTER TABLE %I.item_sync ENABLE ROW LEVEL SECURITY', sch);
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = sch AND tablename = 'item_sync' AND policyname = 'item_sync_tenant_policy'
+        ) THEN
+          EXECUTE format('CREATE POLICY item_sync_tenant_policy ON %I.item_sync USING (true)', sch);
+        END IF;
+
       END $$;
     """
     db.execute(text(schema_sql))
@@ -393,7 +436,7 @@ async def list_sections(account_id: str, user_id: str = Depends(current_user)):
     return [SectionOut(id=r[0], slug=r[1], label=r[2], detail=r[3], schema=normalize_section_schema(r[4])) for r in rows]
 
 @app.post("/api/accounts/{account_id}/sections", response_model=SectionOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
-async def create_section(account_id: str, body: SectionCreate, user_id: str = Depends(current_user)):
+async def create_section(account_id: str, body: SectionCreate, request: Request, user_id: str = Depends(current_user)):
   payload = json.dumps(normalize_section_schema(body.schema))
   with SessionLocal() as db:
     row = db.execute(text("""
@@ -406,7 +449,16 @@ async def create_section(account_id: str, body: SectionCreate, user_id: str = De
       RETURNING id::text, slug, label, COALESCE(detail, ''), COALESCE(schema, '{}'::jsonb)
     """), {"a": account_id, "slug": body.slug, "label": body.label, "detail": body.detail, "schema": payload}).first()
     db.commit()
-    return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], schema=normalize_section_schema(row[4]))
+  if from_web_ui(request):
+    # Adds the incident to ILG Forms and applies the standard incident layout if none was given.
+    push_to_ilgforms(ilgforms_outbound.section_created, account_id, body.slug)
+    with SessionLocal() as db:
+      fresh = db.execute(text("""
+        SELECT id::text, slug, label, COALESCE(detail, ''), COALESCE(schema, '{}'::jsonb)
+        FROM sections WHERE account_id = :a AND slug = :s
+      """), {"a": account_id, "s": body.slug}).first()
+      row = fresh or row
+  return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], schema=normalize_section_schema(row[4]))
 
 @app.get("/api/accounts/{account_id}/sections/{slug}", response_model=SectionOut, dependencies=[Depends(ip_allowlist)])
 async def get_section(account_id: str, slug: str, user_id: str = Depends(current_user)):
@@ -422,7 +474,7 @@ async def get_section(account_id: str, slug: str, user_id: str = Depends(current
     return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], schema=normalize_section_schema(row[4]))
 
 @app.put("/api/accounts/{account_id}/sections/{slug}", response_model=SectionOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
-async def update_section(account_id: str, slug: str, body: SectionUpdate, user_id: str = Depends(current_user)):
+async def update_section(account_id: str, slug: str, body: SectionUpdate, request: Request, user_id: str = Depends(current_user)):
   payload = json.dumps(normalize_section_schema(body.schema))
   with SessionLocal() as db:
     row = db.execute(text("""
@@ -436,11 +488,16 @@ async def update_section(account_id: str, slug: str, body: SectionUpdate, user_i
     if not row:
       raise HTTPException(status_code=404, detail="Section not found")
     db.commit()
-    return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], schema=normalize_section_schema(row[4]))
+  if from_web_ui(request):
+    push_to_ilgforms(ilgforms_outbound.section_updated, account_id, slug)
+  return SectionOut(id=row[0], slug=row[1], label=row[2], detail=row[3], schema=normalize_section_schema(row[4]))
 
 @app.delete("/api/accounts/{account_id}/sections/{slug}", dependencies=[Depends(ip_allowlist), Depends(require_editor)])
-async def delete_section(account_id: str, slug: str, user_id: str = Depends(current_user)):
+async def delete_section(account_id: str, slug: str, request: Request, user_id: str = Depends(current_user)):
   schema_name = f"tenant_{account_id.replace('-', '')}"
+  if from_web_ui(request):
+    # Must run before the rows go: it reads the item links to know which ILG Forms rows to remove.
+    push_to_ilgforms(ilgforms_outbound.section_deleting, account_id, slug)
   with SessionLocal() as db:
     # Ensure RLS context and delete items in this section for that account
     db.execute(rls.set_current_account(account_id))
@@ -460,8 +517,11 @@ async def list_items_default(account_id: str, limit: int = Query(50, ge=1, le=20
   return ItemsPage(items=items, next=next_cursor)
 
 @app.post("/api/accounts/{account_id}/items", response_model=ItemOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
-async def create_item_default(account_id: str, body: ItemCreate, user_id: str = Depends(current_user)):
-  return rls.create_item(account_id, section="default", name=body.name, data=body.data)
+async def create_item_default(account_id: str, body: ItemCreate, request: Request, user_id: str = Depends(current_user)):
+  item = rls.create_item(account_id, section="default", name=body.name, data=body.data)
+  if from_web_ui(request):
+    push_to_ilgforms(ilgforms_outbound.item_created, account_id, "default", item)
+  return item
 
 @app.get("/api/accounts/{account_id}/items/{item_id}", response_model=ItemOut, dependencies=[Depends(ip_allowlist)])
 async def get_item(account_id: str, item_id: str, user_id: str = Depends(current_user)):
@@ -478,7 +538,13 @@ async def update_item(account_id: str, item_id: str, request: Request, body: Ite
   updated = rls.update_item(account_id, item_id, name=body.name, data=body.data)
   if not updated:
     raise HTTPException(status_code=404, detail="Item not found")
-  should_fire_webhook = request.headers.get(WEB_UI_UPDATE_SOURCE_HEADER) == WEB_UI_UPDATE_SOURCE_VALUE
+  should_fire_webhook = from_web_ui(request)
+  if should_fire_webhook and ilgforms_sync.account_has_integration(account_id):
+    # Native ILG Forms sync replaces the n8n webhook for accounts that have an integration.
+    full = rls.get_item(account_id, item_id) or {}
+    push_to_ilgforms(ilgforms_outbound.item_updated, account_id,
+                     {"id": item_id, "name": updated["name"], "data": updated["data"], "section_slug": full.get("section_slug")})
+    should_fire_webhook = False
   if should_fire_webhook:
     # Fire-and-forget style webhook notification using stdlib; failures should not affect the main response
     try:
@@ -511,7 +577,10 @@ async def update_item(account_id: str, item_id: str, request: Request, body: Ite
   return updated
 
 @app.delete("/api/accounts/{account_id}/items/{item_id}", dependencies=[Depends(ip_allowlist), Depends(require_editor)])
-async def delete_item(account_id: str, item_id: str, user_id: str = Depends(current_user)):
+async def delete_item(account_id: str, item_id: str, request: Request, user_id: str = Depends(current_user)):
+  if from_web_ui(request):
+    # Before the delete: the item's ILG Forms links go with it.
+    push_to_ilgforms(ilgforms_outbound.item_deleting, account_id, item_id)
   rls.delete_item(account_id, item_id)
   return {"ok": True}
 
@@ -522,8 +591,99 @@ async def list_section_items(account_id: str, slug: str, limit: int = Query(50, 
   return ItemsPage(items=items, next=next_cursor)
 
 @app.post("/api/accounts/{account_id}/sections/{slug}/items", response_model=ItemOut, dependencies=[Depends(ip_allowlist), Depends(require_editor)])
-async def create_section_item(account_id: str, slug: str, body: ItemCreate, user_id: str = Depends(current_user)):
-  return rls.create_item(account_id, section=slug, name=body.name, data=body.data)
+async def create_section_item(account_id: str, slug: str, body: ItemCreate, request: Request, user_id: str = Depends(current_user)):
+  item = rls.create_item(account_id, section=slug, name=body.name, data=body.data)
+  if from_web_ui(request):
+    push_to_ilgforms(ilgforms_outbound.item_created, account_id, slug, item)
+  return item
+
+# --- ILG Forms integration (inbound) ---
+# Called by the ILG Forms platform, not by a logged-in user: no JWT and no IP
+# allowlist (their egress IPs change). Authenticated by the integration key
+# ILG Forms puts in the body, checked against ilgforms_integrations. Plain
+# `def` so the blocking database work runs in FastAPI's threadpool.
+
+def _ilgforms_inbound(request: Request, body: dict, handler):
+  company_id = body.get("ProviderId") or request.query_params.get("CompanyId")
+  try:
+    integration = ilgforms_sync.authenticate(company_id, body.get("IntegrationKey"))
+    return handler(integration, body)
+  except ilgforms_sync.IntegrationAuthError as exc:
+    ilgforms_sync.log_rejected(company_id=company_id, reason=exc.detail, status=exc.status)
+    raise HTTPException(status_code=exc.status, detail=exc.detail)
+  except ilgforms_sync.BadSubmission as exc:
+    ilgforms_sync.log_rejected(company_id=company_id, reason=str(exc), status=400)
+    raise HTTPException(status_code=400, detail=str(exc))
+
+@app.post("/api/integrations/ilgforms/incident")
+def ilgforms_incident(request: Request, body: dict = Body(...)):
+  """Incident form: page1 + page1.locations[] (properties)."""
+  return _ilgforms_inbound(request, body, ilgforms_sync.process_incident)
+
+@app.post("/api/integrations/ilgforms/devices")
+def ilgforms_devices_endpoint(request: Request, body: dict = Body(...)):
+  """Appliance list form: page1 + deviceReview.devices[]."""
+  return _ilgforms_inbound(request, body, ilgforms_devices.process_devices)
+
+@app.post("/api/integrations/ilgforms/engineer-update")
+def ilgforms_engineer_update(request: Request, body: dict = Body(...)):
+  """Engineer's single-appliance form: deviceReview with a systemID."""
+  return _ilgforms_inbound(request, body, ilgforms_devices.process_engineer_update)
+
+@app.get("/api/accounts/{account_id}/integrations", dependencies=[Depends(ip_allowlist)])
+def account_integrations(account_id: str, user_id: str = Depends(current_user)):
+  """Lets the web UI know whether this account syncs natively (so it skips the legacy n8n calls)."""
+  return {"ilgforms": ilgforms_sync.account_has_integration(account_id)}
+
+# --- ILG Forms integration: sync status for the UI + super-admin tools ---
+
+@app.get("/api/accounts/{account_id}/sections/{slug}/sync-status", dependencies=[Depends(ip_allowlist)])
+def ilgforms_section_sync_status(account_id: str, slug: str, user_id: str = Depends(current_user)):
+  return ilgforms_admin.section_sync_status(account_id, slug)
+
+@app.get("/api/accounts/{account_id}/items/{item_id}/sync-status", dependencies=[Depends(ip_allowlist)])
+def ilgforms_item_sync_status(account_id: str, item_id: str, user_id: str = Depends(current_user)):
+  return ilgforms_admin.item_sync_status(account_id, item_id)
+
+@app.get("/api/admin/ilgforms/summary", dependencies=[Depends(ip_allowlist)])
+def ilgforms_summary(_admin: dict = Depends(require_super_admin)):
+  return ilgforms_admin.summary()
+
+@app.get("/api/admin/ilgforms/sync-log", dependencies=[Depends(ip_allowlist)])
+def ilgforms_sync_log(
+  limit: int = 50, offset: int = 0, flat: bool = False, account_id: str | None = None,
+  direction: str | None = None, result: str | None = None, date_from: str | None = None,
+  date_to: str | None = None, search: str | None = None, _admin: dict = Depends(require_super_admin),
+):
+  return ilgforms_admin.query_sync_log(
+    limit=max(1, min(limit, 200)), offset=max(0, offset), flat=flat, account_id=account_id,
+    direction=direction, result=result, date_from=date_from, date_to=date_to, search=search)
+
+@app.get("/api/admin/ilgforms/sync-log/{log_id}/children", dependencies=[Depends(ip_allowlist)])
+def ilgforms_sync_log_children(log_id: str, _admin: dict = Depends(require_super_admin)):
+  return ilgforms_admin.sync_log_children(log_id)
+
+@app.get("/api/admin/ilgforms/sync-log/{log_id}/payload", dependencies=[Depends(ip_allowlist)])
+def ilgforms_sync_log_payload(log_id: str, _admin: dict = Depends(require_super_admin)):
+  payload = ilgforms_admin.sync_log_payload(log_id)
+  if payload is None:
+    raise HTTPException(status_code=404, detail="No payload stored (kept for 30 days)")
+  return payload
+
+@app.get("/api/admin/ilgforms/orphans", dependencies=[Depends(ip_allowlist)])
+def ilgforms_orphans(_admin: dict = Depends(require_super_admin)):
+  return ilgforms_admin.list_orphans()
+
+@app.post("/api/admin/ilgforms/retry", dependencies=[Depends(ip_allowlist)])
+def ilgforms_retry(body: dict = Body(default={}), _admin: dict = Depends(require_super_admin)):
+  """Re-queue failed writebacks: {"log_id": "..."} for one, empty body for all."""
+  return {"requeued": ilgforms_admin.retry_failed(body.get("log_id"))}
+
+@app.post("/api/admin/ilgforms/reconcile", dependencies=[Depends(ip_allowlist)])
+def ilgforms_reconcile(_admin: dict = Depends(require_super_admin)):
+  if not ilgforms_jobs.outbound_enabled():
+    raise HTTPException(status_code=409, detail="Outbound sync is switched off on this server (ILGFORMS_OUTBOUND)")
+  return {"results": ilgforms_jobs.reconcile_all()}
 
 # --- Comments API ---
 
