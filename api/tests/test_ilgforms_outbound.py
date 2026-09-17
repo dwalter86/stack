@@ -155,3 +155,39 @@ class ColumnMapTests(unittest.TestCase):
     import ilgforms_outbound as out
     cols = out.incident_columns("acc", {"slug": "S1", "label": "1239494-DW", "detail": "free text a user typed"})
     self.assertEqual((cols["ID"], cols["incd"], cols["postCode"], cols["address"], cols["account"]), ("S1", "1239494-DW", "", "", "acc"))
+
+
+@unittest.skipUnless(HAVE_DEPS, "needs the API image (httpx, sqlalchemy)")
+class PropertyInsertPlanTests(unittest.TestCase):
+  REUSE = {"incident_column": "incdId", "incident": "INC1", "house_column": "houseNo", "house": "12",
+           "item_column": "itemId", "item_id": "ITEM-1"}
+
+  def plan(self, rows):
+    return jobs.plan_property_insert(rows, self.REUSE, "ID")
+
+  def test_no_row_for_the_house_inserts(self):
+    self.assertEqual(self.plan([{"ID": "R1", "incdId": "INC1", "houseNo": "14", "itemId": ""}])["action"], "insert")
+
+  def test_blank_row_from_the_form_is_reused_not_duplicated(self):
+    rows = [{"ID": "R1", "incdId": "INC1", "houseNo": " 12 ", "itemId": ""}]
+    self.assertEqual(self.plan(rows), {"action": "reuse", "row_id": "R1"})
+
+  def test_row_owned_by_another_item_blocks_a_second_row(self):
+    rows = [{"ID": "R1", "incdId": "INC1", "houseNo": "12", "itemId": "someone-else"}]
+    self.assertEqual(self.plan(rows), {"action": "taken", "row_id": "R1"})
+
+  def test_blank_row_is_preferred_over_a_taken_one(self):
+    rows = [{"ID": "R1", "incdId": "INC1", "houseNo": "12", "itemId": "someone-else"},
+            {"ID": "R2", "incdId": "INC1", "houseNo": "12", "itemId": None}]
+    self.assertEqual(self.plan(rows), {"action": "reuse", "row_id": "R2"})
+
+  def test_same_house_in_another_incident_is_ignored(self):
+    self.assertEqual(self.plan([{"ID": "R1", "incdId": "OTHER", "houseNo": "12", "itemId": ""}])["action"], "insert")
+
+  def test_retried_insert_finds_its_own_row(self):
+    rows = [{"ID": "R9", "incdId": "INC1", "houseNo": "12", "itemId": "item-1"}]
+    self.assertEqual(self.plan(rows), {"action": "present", "row_id": "R9"})
+
+  def test_no_house_number_never_matches(self):
+    reuse = dict(self.REUSE, house="")
+    self.assertEqual(jobs.plan_property_insert([{"ID": "R1", "incdId": "INC1", "houseNo": "", "itemId": ""}], reuse, "ID")["action"], "insert")

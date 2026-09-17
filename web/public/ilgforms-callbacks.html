@@ -149,7 +149,7 @@
           <tr><td>Create an incident</td><td>New row in the incident list datasource</td></tr>
           <tr><td>Rename an incident</td><td>That row is updated</td></tr>
           <tr><td>Add or edit an item in an incident whose row has no post code or address yet</td><td>The incident row takes them from that item. Once set they are never overwritten.</td></tr>
-          <tr><td>Add an item</td><td>New row in the main property datasource, so the property shows in the app. Skipped when that house already has a property row in the incident.</td></tr>
+          <tr><td>Add an item</td><td>New row in the main property datasource, so the property shows in the app. The sheet is checked first for the same incident and house number: a row with no item id is reused rather than duplicated, and a row belonging to another item means no row is added.</td></tr>
           <tr><td>Add an item that has appliance details (make, model, serial number, type, age or price)</td><td>Also a new row in the device datasource</td></tr>
           <tr><td>Edit an item</td><td>Its row or rows are updated</td></tr>
           <tr><td>Delete an item</td><td>Its row or rows are removed</td></tr>

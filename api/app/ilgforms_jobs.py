@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import text
 
+import ilgforms_matching as matching
 import rls
 from database import SessionLocal
 from ilgforms_client import IlgFormsClient, IlgFormsError, IlgFormsRetryable
@@ -113,6 +114,54 @@ def _finish_job(job: dict, *, status: str, log_result: str, note: str, error: st
     db.commit()
 
 
+def plan_property_insert(rows: list[dict], reuse: dict, key_column: str) -> dict:
+  """Pure: before adding a property row, look at the sheet for the same incident + house.
+
+    present -- a row already carries this item's id (a retried insert): nothing to send
+    reuse   -- a row exists with a blank item id (the incident form wrote it): put our id on it
+    taken   -- a row exists and belongs to another item: add nothing
+    insert  -- no row for that house: add one
+  """
+  house = matching.norm(reuse.get("house"))
+  item_id = str(reuse.get("item_id") or "").strip().lower()
+  same_incident = [r for r in rows if str(r.get(reuse["incident_column"]) or "").strip() == reuse["incident"]]
+  for row in same_incident:
+    if item_id and str(row.get(reuse["item_column"]) or "").strip().lower() == item_id:
+      return {"action": "present", "row_id": str(row.get(key_column) or "")}
+  if not house:
+    return {"action": "insert"}
+  same_house = [r for r in same_incident if matching.norm(r.get(reuse["house_column"])) == house]
+  blank = [r for r in same_house if not str(r.get(reuse["item_column"]) or "").strip()]
+  if blank:
+    return {"action": "reuse", "row_id": str(blank[0].get(key_column) or "")}
+  if same_house:
+    return {"action": "taken", "row_id": str(same_house[0].get(key_column) or "")}
+  return {"action": "insert"}
+
+
+def _relink(job: dict, datasource: str, row_id: str | None):
+  """Point the item's link at a different sheet row, or drop it (row_id None)."""
+  if not job.get("item_id"):
+    return
+  schema = rls._schema_name(job["account_id"])
+  with SessionLocal() as db:
+    db.execute(rls.set_current_account(job["account_id"]))
+    if row_id:
+      db.execute(text(f"UPDATE {schema}.item_sync SET row_id = :row WHERE item_id = :i AND datasource = :ds"),
+                 {"row": row_id, "i": job["item_id"], "ds": datasource})
+      # Edits queued behind this insert were aimed at the row id we had planned to create.
+      db.execute(text("""
+        UPDATE ilgforms_jobs SET payload = jsonb_set(payload, '{row_id}', to_jsonb(CAST(:row AS text)))
+        WHERE item_id = :i AND datasource = :ds AND kind = :k AND status = 'pending'
+      """), {"row": row_id, "i": job["item_id"], "ds": datasource, "k": JOB_UPDATE_ROW})
+    else:
+      db.execute(text(f"DELETE FROM {schema}.item_sync WHERE item_id = :i AND datasource = :ds"),
+                 {"i": job["item_id"], "ds": datasource})
+      db.execute(text("DELETE FROM ilgforms_jobs WHERE item_id = :i AND datasource = :ds AND status = 'pending' AND id <> :me"),
+                 {"i": job["item_id"], "ds": datasource, "me": job["id"]})
+    db.commit()
+
+
 _header_cache: dict[tuple, tuple[float, list[str]]] = {}
 HEADER_CACHE_SECONDS = 600
 
@@ -142,7 +191,24 @@ def run_job(job: dict, integration: dict, transport=None) -> str:
         headers = _headers(client, integration["id"], payload["external_id"])
         # Only send columns the datasource really has (layouts differ slightly between companies).
         values = {k: v for k, v in payload["values"].items() if k in headers}
-        client.insert_row(payload["external_id"], values, headers=headers)
+        decision = plan_property_insert(client.get_rows(payload["external_id"]), payload["reuse"], headers[0]) \
+          if payload.get("reuse") else {"action": "insert"}
+        if decision["action"] == "insert":
+          client.insert_row(payload["external_id"], values, headers=headers)
+        elif decision["action"] == "reuse":
+          reuse = payload["reuse"]
+          client.update_cells(payload["external_id"], decision["row_id"], {reuse["item_column"]: reuse["item_id"]})
+          _relink(job, payload["external_id"], decision["row_id"])
+          _finish_job(job, status="done", log_result="success", error=None, retry_in=None,
+                      note=attempt + f" (the sheet already had a row for this house with no item id: linked to it, row {decision['row_id']})")
+          return "done"
+        elif decision["action"] == "present":
+          _relink(job, payload["external_id"], decision["row_id"])
+        else:  # "taken": that house already belongs to another item
+          _relink(job, payload["external_id"], None)
+          _finish_job(job, status="done", log_result="skipped", error=None, retry_in=None,
+                      note=attempt + f" (not added: this house already has a property row, {decision['row_id']})")
+          return "done"
       elif job["kind"] == JOB_DELETE_ROWS:
         try:
           client.delete_rows(payload["external_id"], payload["row_ids"])
@@ -179,7 +245,13 @@ def run_due_jobs(limit: int = 25, transport=None) -> dict:
   totals = {"enabled": True, "done": 0, "retry": 0, "failed": 0}
   touched: set[str] = set()
   integrations: dict[str, dict | None] = {}
-  for job in claim_due_jobs(limit):
+  # One job at a time, claimed fresh each time: a job can rewrite the ones queued behind it
+  # (an insert that reuses an existing sheet row redirects the edits waiting on it).
+  for _ in range(limit):
+    claimed = claim_due_jobs(1)
+    if not claimed:
+      break
+    job = claimed[0]
     if job["integration_id"] not in integrations:
       with SessionLocal() as db:
         integrations[job["integration_id"]] = _integration(db, job["integration_id"])

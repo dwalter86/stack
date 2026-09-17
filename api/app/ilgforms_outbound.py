@@ -294,7 +294,12 @@ def item_created(account_id: str, slug: str, item: dict):
       _set_link(db, schema, item["id"], integ["main"], row_id)
       _enqueue(db, integ, account_id, kind=JOB_INSERT_ROW, datasource=integ["main"],
                payload={"values": property_columns(item, account_id, section, for_insert=True, row_id=row_id,
-                                                   has_appliance=appliance)},
+                                                   has_appliance=appliance),
+                        # The platform only knows rows it is linked to. A row the incident form wrote with a
+                        # blank itemId is invisible to it, so the runner checks the sheet itself before adding.
+                        "reuse": {"incident_column": "incdId", "incident": section["slug"], "house_column": "houseNo",
+                                  "house": _s((item.get("data") or {}).get("houseNo")), "item_column": "itemId",
+                                  "item_id": item["id"]}},
                direction="sent", event="item.insert", summary=f"{what}: new property row queued for {integ['main']}",
                section=section, item_id=item["id"], row_id=row_id)
     if appliance:
