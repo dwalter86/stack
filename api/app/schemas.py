@@ -85,6 +85,7 @@ class SectionBase(BaseModel):
     slug: str
     label: str
     detail: str = ""
+    address: str = ""
     schema: dict = Field(default_factory=dict)
 
 class SectionCreate(SectionBase):
@@ -93,6 +94,7 @@ class SectionCreate(SectionBase):
 class SectionUpdate(BaseModel):
     label: str
     detail: Optional[str] = None
+    address: Optional[str] = None
     schema: dict = Field(default_factory=dict)
 
 class SectionOut(SectionBase):

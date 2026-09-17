@@ -136,3 +136,21 @@ class ColumnMapTests(unittest.TestCase):
   def test_new_row_id_shape(self):
     import ilgforms_outbound as out
     self.assertRegex(out.new_row_id(), r"^[A-Z0-9]{4}-\d{8}-\d{6}-\d{8}$")
+
+  def test_property_columns_first_visit_outcome(self):
+    import ilgforms_outbound as out
+    sec = {"slug": "S1", "label": "Street"}
+    appliance = {"id": "i1", "name": "D Smith", "data": {"houseNo": 12, "itemMake": "Sony", "status": ""}}
+    cols = out.property_columns(appliance, "acc", sec, for_insert=True, row_id="R1", has_appliance=True)
+    self.assertEqual((cols["ID"], cols["itemId"], cols["incdId"], cols["houseNo"], cols["initialVisit"]), ("R1", "i1", "S1", "12", "Faults"))
+    # a repair status belongs to the device sheet: it must not overwrite the first-visit outcome
+    appliance["data"]["status"] = "Repaired"
+    self.assertNotIn("initialVisit", out.property_columns(appliance, "acc", sec, for_insert=False, has_appliance=True))
+    # a property-only item keeps the old behaviour: its status is the sheet's initialVisit
+    prop = {"id": "i2", "name": "P", "data": {"status": "No Faults"}}
+    self.assertEqual(out.property_columns(prop, "acc", sec, for_insert=False)["initialVisit"], "No Faults")
+
+  def test_incident_columns_carry_post_code_and_address(self):
+    import ilgforms_outbound as out
+    cols = out.incident_columns("acc", {"slug": "S1", "label": "1239494-DW", "detail": "T3 5TT", "address": "Testing Street"})
+    self.assertEqual((cols["ID"], cols["incd"], cols["postCode"], cols["address"], cols["account"]), ("S1", "1239494-DW", "T3 5TT", "Testing Street", "acc"))

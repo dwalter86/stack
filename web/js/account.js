@@ -134,6 +134,19 @@ function renderStatusText(label, count) {
   const sectionSlugInput = document.getElementById('sectionSlug');
   const sectionLabelInput = document.getElementById('sectionLabel');
   const sectionDetailInput = document.getElementById('sectionDetail');
+  const sectionAddressInput = document.getElementById('sectionAddress');
+  // Accounts synced with ILG Forms record an incident's post code and address separately,
+  // because the ILG Forms incident list has a column for each.
+  let nativeSync = false;
+  api(`/api/accounts/${accountId}/integrations`).then(r => {
+    nativeSync = !!(r && r.ilgforms);
+    if (!nativeSync) return;
+    const prompt = document.getElementById('sectionDetailPrompt');
+    if (prompt) prompt.textContent = 'Post code';
+    if (sectionDetailInput) sectionDetailInput.placeholder = 'e.g. DN14 8QD';
+    const row = document.getElementById('sectionAddressRow');
+    if (row) row.classList.remove('hidden');
+  }).catch(() => {});
   const sectionCancel = document.getElementById('sectionCancel');
 
   const sectionSearch = document.getElementById('sectionSearch');
@@ -248,6 +261,7 @@ function renderStatusText(label, count) {
         (s.label || '').toLowerCase().includes(term.toLowerCase())
         || (s.slug || '').toLowerCase().includes(term.toLowerCase())
         || (s.detail || '').toLowerCase().includes(term.toLowerCase())
+        || (s.address || '').toLowerCase().includes(term.toLowerCase())
       )
       : allSections;
 
@@ -265,7 +279,7 @@ function renderStatusText(label, count) {
     emptyStateEl.classList.add('hidden');
     sectionListEl.innerHTML = filtered.map(s => {
       const slugLine = showSlugs ? `<div class="small"><code>${escapeHtml(s.slug)}</code></div>` : '';
-      const detailText = (s.detail || '').trim();
+      const detailText = [(s.address || '').trim(), (s.detail || '').trim()].filter(Boolean).join(', ');
       const detailLine = detailText ? `<span class="small" style="margin-left:8px;">${escapeHtml(detailText)}</span>` : '';
       const statusSummaryContainerId = `sectionStatusSummary-${encodeURIComponent(s.slug)}`;
       return `
@@ -334,6 +348,7 @@ function renderStatusText(label, count) {
     const rawSlug = sectionSlugInput.value || generateSectionSlug();
     const label = sectionLabelInput.value.trim();
     const detail = sectionDetailInput ? sectionDetailInput.value.trim() : '';
+    const address = (nativeSync && sectionAddressInput) ? sectionAddressInput.value.trim() : '';
     const slug = rawSlug.trim() || generateSectionSlug();
 
     if (slug === 'default') {
@@ -344,10 +359,9 @@ function renderStatusText(label, count) {
     try {
       await api(`/api/accounts/${accountId}/sections`, {
         method: 'POST',
-        body: JSON.stringify({ slug, label: label || slug, detail, schema: {} })
+        body: JSON.stringify({ slug, label: label || slug, detail, address, schema: {} })
       });
       // Legacy n8n webhook: only for accounts without native ILG Forms sync (the API pushes those itself).
-      const nativeSync = await api(`/api/accounts/${accountId}/integrations`).then(r => !!(r && r.ilgforms)).catch(() => false);
       if (!nativeSync) try {
         fetch('https://n8n.adigi8.app/webhook/4e02f681-fdf6-4dea-a4c8-77dca1d54a5a', {
           method: 'POST',

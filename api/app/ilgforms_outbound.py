@@ -5,7 +5,11 @@ Three datasources per integration:
   incident_datasource  one row per incident (section)      key ID    = section slug
   main_datasource      one row per property               key ID,   itemId   = item id
   device_datasource    one row per appliance              key uniq, systemID = item id
-An item with any appliance detail is an appliance; one without is a property.
+The ILG Forms app lists an incident's properties from the property sheet and the
+appliances from the device sheet. So an item added in the web platform always
+gets a property row (unless its house already has one in that incident), and
+also an appliance row when it carries any appliance detail. One item can
+therefore be linked to both sheets.
 """
 import json
 import random
@@ -14,6 +18,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import text
 
+import ilgforms_matching as matching
 import rls
 from database import SessionLocal
 from ilgforms_sync import _log
@@ -74,23 +79,49 @@ def device_columns(item: dict, account_id: str, section: dict, engineer_emails: 
   return cols
 
 
-def property_columns(item: dict, account_id: str, section: dict, *, for_insert: bool, row_id: str | None = None) -> dict:
+def property_columns(item: dict, account_id: str, section: dict, *, for_insert: bool, row_id: str | None = None,
+                     has_appliance: bool = False) -> dict:
   data = item.get("data") or {}
+  status = _s(data.get("status"))
+  is_initial = matching.norm(status) in matching.INITIAL_VISIT_STATUSES
   cols = {
     "email": _s(data.get("email")), "houseNo": _s(data.get("houseNo")), "postCode": _s(data.get("postcode")),
     "streetName": _s(data.get("address")), "customerName": _s(item.get("name")),
-    "initialVisit": _s(data.get("status")), "teleNo1": _s(data.get("telephone")),
-    "teleNo2": _s(data.get("telephone2")),
+    "teleNo1": _s(data.get("telephone")), "teleNo2": _s(data.get("telephone2")),
   }
+  # initialVisit is the outcome of the first visit (Faults / No Faults / Out / N/A). For an item that is
+  # also an appliance, status is the repair status and belongs to the device sheet, not here.
   if for_insert:
+    cols["initialVisit"] = status if (status and is_initial) else ("Faults" if has_appliance else "")
     cols.update({"ID": row_id, "incd": _s(section.get("label")), "incdId": _s(section.get("slug")),
                  "accountId": account_id, "itemId": item["id"]})
+  elif not has_appliance or (status and is_initial):
+    cols["initialVisit"] = status
   return cols
+
+
+def _house_has_property_row(db, schema: str, slug: str, item: dict, main_ds: str) -> bool:
+  """Does another item for the same house in this incident already own a property row?"""
+  data = item.get("data") or {}
+  house, postcode = matching.norm(data.get("houseNo")), matching.norm_postcode(data.get("postcode"))
+  if not house:
+    return False
+  rows = db.execute(text(f"""
+    SELECT COALESCE(i.data, '{{}}'::jsonb) FROM {schema}.items i
+    JOIN {schema}.item_sync s ON s.item_id = i.id AND s.datasource = :ds AND s.row_id IS NOT NULL
+    WHERE i.section_slug = :slug AND i.id::text <> :me
+  """), {"ds": main_ds, "slug": slug, "me": item["id"]}).all()
+  for (other,) in rows:
+    other = other if isinstance(other, dict) else {}
+    if matching.norm(other.get("houseNo")) == house and (not postcode or matching.norm_postcode(other.get("postcode")) in ("", postcode)):
+      return True
+  return False
 
 
 def incident_columns(account_id: str, section: dict) -> dict:
   return {"ID": _s(section.get("slug")), "incd": _s(section.get("label")), "postCode": _s(section.get("detail")),
-          "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"), "colour": "In Progress", "account": account_id}
+          "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"), "colour": "In Progress", "account": account_id,
+          "address": _s(section.get("address"))}
 
 
 # --- queue helpers -----------------------------------------------------------------------
@@ -126,9 +157,9 @@ def _retire(db, *, item_id: str | None = None, account_id: str | None = None, se
 
 
 def _section(db, account_id: str, slug: str) -> dict:
-  row = db.execute(text("SELECT slug, label, COALESCE(detail, '') FROM sections WHERE account_id = :a AND slug = :s"),
+  row = db.execute(text("SELECT slug, label, COALESCE(detail, ''), COALESCE(address, '') FROM sections WHERE account_id = :a AND slug = :s"),
                    {"a": account_id, "s": slug}).first()
-  return {"slug": slug, "label": row[1] if row else slug, "detail": row[2] if row else ""}
+  return {"slug": slug, "label": row[1] if row else slug, "detail": row[2] if row else "", "address": row[3] if row else ""}
 
 
 def _links(db, schema: str, item_id: str) -> dict:
@@ -197,9 +228,10 @@ def section_updated(account_id: str, slug: str):
     _retire(db, account_id=account_id, section_slug=slug, kinds=(JOB_UPDATE_ROW,), datasource=integ["incident"],
             note="superseded by a newer edit")
     _enqueue(db, integ, account_id, kind=JOB_UPDATE_ROW, datasource=integ["incident"],
-             payload={"row_id": linked[0], "columns": {"incd": section["label"], "postCode": section["detail"]}},
+             payload={"row_id": linked[0], "columns": {"incd": section["label"], "postCode": section["detail"],
+                                                        "address": section["address"]}},
              direction="updated", event="incident.update",
-             summary=f"Incident {section['label']}: name / post code queued for {integ['incident']}",
+             summary=f"Incident {section['label']}: name / post code / address queued for {integ['incident']}",
              section=section, row_id=linked[0])
     db.commit()
 
@@ -213,16 +245,27 @@ def item_created(account_id: str, slug: str, item: dict):
     schema = rls._schema_name(account_id)
     db.execute(rls.set_current_account(account_id))
     section = _section(db, account_id, slug)
-    if is_appliance(item.get("data")):
-      datasource, row_id = integ["device"], item["id"]
-      values = device_columns(item, account_id, section, integ["engineer_emails"], for_insert=True)
+    appliance = is_appliance(item.get("data"))
+    what = _what(item)
+    if _house_has_property_row(db, schema, slug, item, integ["main"]):
+      if not appliance:
+        _log(db, integration_id=integ["id"], account_id=account_id, direction="sent", event="item.insert",
+             result="skipped", section_slug=section["slug"], section_label=section["label"], item_id=item["id"],
+             summary=f"{what}: this house already has a property row in {integ['main']}, and the item has no appliance details")
     else:
-      datasource, row_id = integ["main"], new_row_id()
-      values = property_columns(item, account_id, section, for_insert=True, row_id=row_id)
-    _set_link(db, schema, item["id"], datasource, row_id)
-    _enqueue(db, integ, account_id, kind=JOB_INSERT_ROW, datasource=datasource, payload={"values": values},
-             direction="sent", event="item.insert", summary=f"{_what(item)}: new row queued for {datasource}",
-             section=section, item_id=item["id"], row_id=row_id)
+      row_id = new_row_id()
+      _set_link(db, schema, item["id"], integ["main"], row_id)
+      _enqueue(db, integ, account_id, kind=JOB_INSERT_ROW, datasource=integ["main"],
+               payload={"values": property_columns(item, account_id, section, for_insert=True, row_id=row_id,
+                                                   has_appliance=appliance)},
+               direction="sent", event="item.insert", summary=f"{what}: new property row queued for {integ['main']}",
+               section=section, item_id=item["id"], row_id=row_id)
+    if appliance:
+      _set_link(db, schema, item["id"], integ["device"], item["id"])
+      _enqueue(db, integ, account_id, kind=JOB_INSERT_ROW, datasource=integ["device"],
+               payload={"values": device_columns(item, account_id, section, integ["engineer_emails"], for_insert=True)},
+               direction="sent", event="item.insert", summary=f"{what}: new appliance row queued for {integ['device']}",
+               section=section, item_id=item["id"], row_id=item["id"])
     db.commit()
 
 
@@ -246,7 +289,8 @@ def item_updated(account_id: str, item: dict):
       if datasource == integ["device"]:
         columns = device_columns(item, account_id, section, integ["engineer_emails"], for_insert=False)
       elif datasource == integ["main"]:
-        columns = property_columns(item, account_id, section, for_insert=False)
+        columns = property_columns(item, account_id, section, for_insert=False,
+                                   has_appliance=integ["device"] in links or is_appliance(item.get("data")))
       else:
         continue
       _retire(db, item_id=item["id"], kinds=(JOB_UPDATE_ROW,), datasource=datasource, note="superseded by a newer edit")

@@ -379,6 +379,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
   const editSectionForm = document.getElementById('editSectionForm');
   const editSectionLabelInput = document.getElementById('editSectionLabel');
   const editSectionDetailInput = document.getElementById('editSectionDetail');
+  const editSectionAddressInput = document.getElementById('editSectionAddress');
   const editSectionCancel = document.getElementById('editSectionCancel');
   const editSectionMsg = document.getElementById('editSectionMsg');
   const schemaFieldsContainer = document.getElementById('schemaFieldsContainer');
@@ -607,6 +608,11 @@ function saveItemZoom(accountId, slug, zoomPercent) {
     editSectionForm.reset();
     editSectionLabelInput.value = currentLabel;
     editSectionDetailInput.value = currentDetail;
+    if (syncEnabled) {
+      document.getElementById('editSectionDetailPrompt').textContent = 'Post code';
+      document.getElementById('editSectionAddressRow').classList.remove('hidden');
+    }
+    if (editSectionAddressInput) editSectionAddressInput.value = (currentSection?.address || '').trim();
     editSectionModal.classList.remove('hidden');
     setTimeout(() => editSectionLabelInput.focus(), 0);
   }
@@ -661,11 +667,13 @@ function saveItemZoom(accountId, slug, zoomPercent) {
       const currentDetail = (currentSection?.detail || '').trim();
       const nextLabel = editSectionLabelInput.value.trim();
       const nextDetail = editSectionDetailInput.value.trim();
+      const currentAddress = (currentSection?.address || '').trim();
+      const nextAddress = (syncEnabled && editSectionAddressInput) ? editSectionAddressInput.value.trim() : currentAddress;
       if (!nextLabel) {
         editSectionMsg.textContent = 'Section name is required.';
         return;
       }
-      if (nextLabel === currentLabel && nextDetail === currentDetail) {
+      if (nextLabel === currentLabel && nextDetail === currentDetail && nextAddress === currentAddress) {
         closeEditSectionModal();
         return;
       }
@@ -675,6 +683,7 @@ function saveItemZoom(accountId, slug, zoomPercent) {
           body: JSON.stringify({
             label: nextLabel,
             detail: nextDetail,
+            address: nextAddress,
             schema: currentSection?.schema || {}
           })
         });

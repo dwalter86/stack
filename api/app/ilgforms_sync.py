@@ -248,11 +248,12 @@ def process_incident(integration: dict, body: dict) -> dict:
 
     section_schema = resolve_section_schema(db, account_id, integration.get("section_schema"))
     section_created = bool(db.execute(text("""
-      INSERT INTO sections(account_id, slug, label, detail, schema)
-      VALUES (:a, :slug, :label, :detail, CAST(:schema AS jsonb))
+      INSERT INTO sections(account_id, slug, label, detail, schema, address)
+      VALUES (:a, :slug, :label, :detail, CAST(:schema AS jsonb), :address)
       ON CONFLICT (account_id, slug) DO NOTHING
       RETURNING id
     """), {"a": account_id, "slug": slug, "label": label, "detail": detail,
+           "address": matching.join_lines(page1.get("address")),
            "schema": json.dumps(section_schema)}).first())
 
     db.execute(text("""
