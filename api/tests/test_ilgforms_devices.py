@@ -34,9 +34,34 @@ class DevicePlanTests(unittest.TestCase):
   def test_name_postcode_make_links(self):
     self.assertEqual(m.plan_devices([dev()], BASE, [item("aaa")])[0]["action"], m.ACTION_LINK)
 
-  def test_blank_make_never_swallows_the_property_item(self):
-    # n8n matched "" == "" here and turned the property record into the appliance.
-    self.assertEqual(m.plan_devices([dev(make="")], BASE, [item("prop", make="")])[0]["action"], m.ACTION_CREATE)
+  def prop(self, id_="prop", house="9", postcode="TE5 7ST", **data):
+    return {"id": id_, "name": "Mr Forms", "data": {"houseNo": house, "postcode": postcode, "status": "Faults", **data},
+            "created_at": "2026-09-17"}
+
+  def test_first_appliance_fills_the_property_item_instead_of_making_a_second_row(self):
+    # The James Jones case: the incident form made the property item, then the appliance form arrived.
+    plan = m.plan_devices([dev()], BASE, [self.prop()])[0]
+    self.assertEqual((plan["action"], plan["item_id"]), (m.ACTION_LINK, "prop"))
+    self.assertIn("property item", plan["reason"])
+
+  def test_second_appliance_at_the_same_house_gets_its_own_item(self):
+    devices = [dev(), dev(uniq_up="DEV2-17092026-120001-22222222", make="Bosch")]
+    plans = m.plan_devices(devices, BASE, [self.prop()])
+    self.assertEqual([(p["action"], p["item_id"]) for p in plans], [(m.ACTION_LINK, "prop"), (m.ACTION_CREATE, None)])
+
+  def test_property_item_that_already_has_an_appliance_is_not_reused(self):
+    taken = self.prop(itemMake="Sony")
+    self.assertEqual(m.plan_devices([dev()], BASE, [taken])[0]["action"], m.ACTION_CREATE)
+
+  def test_property_item_already_linked_to_a_device_row_is_not_reused(self):
+    self.assertEqual(m.plan_devices([dev()], BASE, [self.prop()], links={"prop": "OTHER-ROW"})[0]["action"], m.ACTION_CREATE)
+
+  def test_property_at_a_different_house_is_not_reused(self):
+    self.assertEqual(m.plan_devices([dev()], BASE, [self.prop(house="11")])[0]["action"], m.ACTION_CREATE)
+
+  def test_an_existing_appliance_item_is_preferred_over_the_bare_property(self):
+    plan = m.plan_devices([dev()], BASE, [self.prop(), item("appl")])[0]
+    self.assertEqual(plan["item_id"], "appl")
 
   def test_two_identical_appliances_get_two_items(self):
     devices = [dev(), dev(uniq_up="DEV2-17092026-120001-22222222")]

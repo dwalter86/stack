@@ -27,7 +27,7 @@ JOB_INSERT_ROW = "insert_row"
 JOB_UPDATE_ROW = "update_row"
 JOB_DELETE_ROWS = "delete_rows"
 
-APPLIANCE_FIELDS = ("itemMake", "itemModel", "itemSerialNumber", "itemApplianceType", "itemAge", "itemPrice")
+APPLIANCE_FIELDS = matching.APPLIANCE_FIELDS
 
 
 def integration_for_account(db, account_id: str) -> dict | None:

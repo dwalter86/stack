@@ -84,7 +84,7 @@
 
     <section class="card doc-card">
       <h2>2. Appliance list form</h2>
-      <p>Creates or updates one item per appliance in an existing incident, adds the engineer's comment, and builds full photo links. For each new item, <code>systemID</code>, <code>systemAccountID</code> and <code>systemSectionID</code> are written back to the appliance's row in the device datasource.</p>
+      <p>Creates or updates items for the appliances in an existing incident, adds the engineer's comment, and builds full photo links. One person at one house is one item: the first appliance at a house is added to that house's existing property item, so the item then carries both the customer and the appliance. Each further appliance at the same house gets an item of its own. For each new item, <code>systemID</code>, <code>systemAccountID</code> and <code>systemSectionID</code> are written back to the appliance's row in the device datasource.</p>
       <div class="table-wrapper"><table class="doc-table">
         <thead><tr><th>Field</th><th>Needed</th><th>Used for</th></tr></thead>
         <tbody>

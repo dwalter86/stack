@@ -208,6 +208,11 @@ def item_fields(location: dict, *, existing_data: dict | None, now_iso: str) -> 
 # --- appliances (the "Items upload" form) ----------------------------------------------------
 
 PHOTO_BASE_URL = "https://www.ilgforms.com/Files/FormEntry/"
+APPLIANCE_FIELDS = ("itemMake", "itemModel", "itemSerialNumber", "itemApplianceType", "itemAge", "itemPrice")
+
+
+def has_appliance_details(data: dict) -> bool:
+  return any(str((data or {}).get(f) or "").strip() for f in APPLIANCE_FIELDS)
 
 
 def hyphenate_entry_id(entry_id: str, ds_row_id: str = "") -> str:
@@ -235,8 +240,14 @@ def plan_devices(devices: list, base: dict, section_items: list, links: dict | N
   exists but the sheet does not know its id), create, or skip (dead systemID).
 
   links -- item_id -> device-datasource row id already recorded for that item.
-  The fallback match is the n8n one (customer name + post code + make), but only
-  when the appliance has a make: a blank make must not swallow the property item.
+
+  One person at one house should be ONE item, not a property item plus a separate
+  appliance item. So when an appliance has no item yet, the order is:
+    1. the item already linked to this device row (a re-delivery);
+    2. an existing appliance item with the same customer, post code and make;
+    3. the property item for that house, if it has no appliance on it yet: the
+       appliance is filled into it (the incident form made it moments earlier);
+    4. otherwise a new item. A second appliance at the same house lands here.
   """
   links = links or {}
   by_id = {str(item["id"]).lower(): item for item in section_items}
@@ -276,9 +287,21 @@ def plan_devices(devices: list, base: dict, section_items: list, links: dict | N
             and norm(data.get("itemMake")) == make_key):
           chosen = item_id
           break
+    reason = "Linked to existing item"
+    if not chosen:
+      house = norm(base.get("houseNoName") or device.get("houseNo"))
+      for item in section_items:
+        item_id = str(item["id"]).lower()
+        data = item.get("data") or {}
+        if not house or item_id in claimed or links.get(item_id) or has_appliance_details(data):
+          continue
+        item_postcode = norm_postcode(data.get("postcode"))
+        if norm(data.get("houseNo")) == house and (not post_key or not item_postcode or item_postcode == post_key):
+          chosen, reason = item_id, "Added to the existing property item for this house"
+          break
     if chosen:
       claimed.add(chosen)
-      plan.update(action=ACTION_LINK, item_id=chosen, reason="Linked to existing item")
+      plan.update(action=ACTION_LINK, item_id=chosen, reason=reason)
     else:
       plan.update(action=ACTION_CREATE, reason="No existing item matched")
     plans.append(plan)
