@@ -134,19 +134,9 @@ function renderStatusText(label, count) {
   const sectionSlugInput = document.getElementById('sectionSlug');
   const sectionLabelInput = document.getElementById('sectionLabel');
   const sectionDetailInput = document.getElementById('sectionDetail');
-  const sectionAddressInput = document.getElementById('sectionAddress');
-  // Accounts synced with ILG Forms record an incident's post code and address separately,
-  // because the ILG Forms incident list has a column for each.
+  // Accounts synced natively with ILG Forms skip the legacy n8n webhook on create.
   let nativeSync = false;
-  api(`/api/accounts/${accountId}/integrations`).then(r => {
-    nativeSync = !!(r && r.ilgforms);
-    if (!nativeSync) return;
-    const prompt = document.getElementById('sectionDetailPrompt');
-    if (prompt) prompt.textContent = 'Post code';
-    if (sectionDetailInput) sectionDetailInput.placeholder = 'e.g. DN14 8QD';
-    const row = document.getElementById('sectionAddressRow');
-    if (row) row.classList.remove('hidden');
-  }).catch(() => {});
+  api(`/api/accounts/${accountId}/integrations`).then(r => { nativeSync = !!(r && r.ilgforms); }).catch(() => {});
   const sectionCancel = document.getElementById('sectionCancel');
 
   const sectionSearch = document.getElementById('sectionSearch');
@@ -348,7 +338,6 @@ function renderStatusText(label, count) {
     const rawSlug = sectionSlugInput.value || generateSectionSlug();
     const label = sectionLabelInput.value.trim();
     const detail = sectionDetailInput ? sectionDetailInput.value.trim() : '';
-    const address = (nativeSync && sectionAddressInput) ? sectionAddressInput.value.trim() : '';
     const slug = rawSlug.trim() || generateSectionSlug();
 
     if (slug === 'default') {
@@ -359,7 +348,7 @@ function renderStatusText(label, count) {
     try {
       await api(`/api/accounts/${accountId}/sections`, {
         method: 'POST',
-        body: JSON.stringify({ slug, label: label || slug, detail, address, schema: {} })
+        body: JSON.stringify({ slug, label: label || slug, detail, schema: {} })
       });
       // Legacy n8n webhook: only for accounts without native ILG Forms sync (the API pushes those itself).
       if (!nativeSync) try {

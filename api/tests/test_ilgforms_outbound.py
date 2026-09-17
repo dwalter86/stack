@@ -150,7 +150,8 @@ class ColumnMapTests(unittest.TestCase):
     prop = {"id": "i2", "name": "P", "data": {"status": "No Faults"}}
     self.assertEqual(out.property_columns(prop, "acc", sec, for_insert=False)["initialVisit"], "No Faults")
 
-  def test_incident_columns_carry_post_code_and_address(self):
+  def test_new_incident_row_has_no_post_code_or_address(self):
+    # They are not typed on the incident: the first item to have them fills them in.
     import ilgforms_outbound as out
-    cols = out.incident_columns("acc", {"slug": "S1", "label": "1239494-DW", "detail": "T3 5TT", "address": "Testing Street"})
-    self.assertEqual((cols["ID"], cols["incd"], cols["postCode"], cols["address"], cols["account"]), ("S1", "1239494-DW", "T3 5TT", "Testing Street", "acc"))
+    cols = out.incident_columns("acc", {"slug": "S1", "label": "1239494-DW", "detail": "free text a user typed"})
+    self.assertEqual((cols["ID"], cols["incd"], cols["postCode"], cols["address"], cols["account"]), ("S1", "1239494-DW", "", "", "acc"))

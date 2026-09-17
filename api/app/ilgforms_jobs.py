@@ -301,16 +301,21 @@ def reconcile(integration_id: str, transport=None) -> dict:
 
   with SessionLocal() as db:
     # Incidents: a section is synced when the incident list holds a row whose key is its slug.
-    listed = {str(r.get("ID") or "").strip() for r in incident_rows} - {""}
+    by_key = {str(r.get("ID") or "").strip(): r for r in incident_rows}
+    listed = set(by_key) - {""}
     for account_id, slug in db.execute(text(
         "SELECT account_id::text, slug FROM sections WHERE account_id::text = ANY(:a)"), {"a": accounts}).all():
       if slug in listed:
+        # Remember what the row already holds, so an item never overwrites a post code or address.
         db.execute(text("""
-          INSERT INTO ilgforms_section_links (account_id, section_slug, datasource, row_id, status, last_checked_at, last_synced_at)
-          VALUES (:a, :s, :ds, :s, 'synced', now(), now())
+          INSERT INTO ilgforms_section_links (account_id, section_slug, datasource, row_id, status, last_checked_at, last_synced_at, post_code, address)
+          VALUES (:a, :s, :ds, :s, 'synced', now(), now(), NULLIF(:pc, ''), NULLIF(:ad, ''))
           ON CONFLICT (account_id, section_slug, datasource) DO UPDATE
-            SET status = 'synced', last_checked_at = now(), last_synced_at = now()
-        """), {"a": account_id, "s": slug, "ds": integration["incident_datasource"]})
+            SET status = 'synced', last_checked_at = now(), last_synced_at = now(),
+                post_code = COALESCE(NULLIF(EXCLUDED.post_code, ''), ilgforms_section_links.post_code),
+                address = COALESCE(NULLIF(EXCLUDED.address, ''), ilgforms_section_links.address)
+        """), {"a": account_id, "s": slug, "ds": integration["incident_datasource"],
+               "pc": str(by_key[slug].get("postCode") or "").strip(), "ad": str(by_key[slug].get("address") or "").strip()})
     db.execute(text("""
       UPDATE ilgforms_section_links SET status = 'not_synced', last_checked_at = now()
       WHERE datasource = :ds AND status = 'synced' AND account_id::text = ANY(:a) AND NOT (section_slug = ANY(:listed))

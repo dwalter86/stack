@@ -257,9 +257,13 @@ def process_incident(integration: dict, body: dict) -> dict:
            "schema": json.dumps(section_schema)}).first())
 
     db.execute(text("""
-      INSERT INTO ilgforms_section_links (account_id, section_slug, datasource, row_id, status, last_checked_at)
-      VALUES (:a, :s, :ds, :s, 'pending', now()) ON CONFLICT DO NOTHING
-    """), {"a": account_id, "s": slug, "ds": integration["incident_datasource"]})
+      INSERT INTO ilgforms_section_links (account_id, section_slug, datasource, row_id, status, last_checked_at, post_code, address)
+      VALUES (:a, :s, :ds, :s, 'pending', now(), NULLIF(:pc, ''), NULLIF(:ad, ''))
+      ON CONFLICT (account_id, section_slug, datasource) DO UPDATE
+        SET post_code = COALESCE(ilgforms_section_links.post_code, EXCLUDED.post_code),
+            address = COALESCE(ilgforms_section_links.address, EXCLUDED.address)
+    """), {"a": account_id, "s": slug, "ds": integration["incident_datasource"], "pc": detail,
+           "ad": matching.join_lines(page1.get("address"))})
 
     # Every item in the section: no page limit (the n8n flow only ever saw 50).
     section_items = [

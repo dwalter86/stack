@@ -119,9 +119,11 @@ def _house_has_property_row(db, schema: str, slug: str, item: dict, main_ds: str
 
 
 def incident_columns(account_id: str, section: dict) -> dict:
-  return {"ID": _s(section.get("slug")), "incd": _s(section.get("label")), "postCode": _s(section.get("detail")),
+  """A new incident's row. Post code and address are left blank: they are not entered on the
+  incident, they are filled from the first item that has them (see _fill_incident_location)."""
+  return {"ID": _s(section.get("slug")), "incd": _s(section.get("label")), "postCode": "",
           "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"), "colour": "In Progress", "account": account_id,
-          "address": _s(section.get("address"))}
+          "address": ""}
 
 
 # --- queue helpers -----------------------------------------------------------------------
@@ -228,12 +230,46 @@ def section_updated(account_id: str, slug: str):
     _retire(db, account_id=account_id, section_slug=slug, kinds=(JOB_UPDATE_ROW,), datasource=integ["incident"],
             note="superseded by a newer edit")
     _enqueue(db, integ, account_id, kind=JOB_UPDATE_ROW, datasource=integ["incident"],
-             payload={"row_id": linked[0], "columns": {"incd": section["label"], "postCode": section["detail"],
-                                                        "address": section["address"]}},
+             payload={"row_id": linked[0], "columns": {"incd": section["label"]}},
              direction="updated", event="incident.update",
-             summary=f"Incident {section['label']}: name / post code / address queued for {integ['incident']}",
+             summary=f"Incident {section['label']}: name queued for {integ['incident']}",
              section=section, row_id=linked[0])
     db.commit()
+
+
+def _fill_incident_location(db, integ: dict, account_id: str, section: dict, item: dict):
+  """The incident list row gets its post code and address from the incident's items: the first
+  item to have each one fills it in, and it is never overwritten after that."""
+  link = db.execute(text("""
+    SELECT row_id, COALESCE(post_code, ''), COALESCE(address, '') FROM ilgforms_section_links
+    WHERE account_id = :a AND section_slug = :s AND datasource = :ds
+  """), {"a": account_id, "s": section["slug"], "ds": integ["incident"]}).first()
+  if not link:
+    return
+  data = item.get("data") or {}
+  columns = {}
+  if not link[1].strip() and _s(data.get("postcode")):
+    columns["postCode"] = _s(data.get("postcode"))
+  if not link[2].strip() and _s(data.get("address")):
+    columns["address"] = matching.join_lines(data.get("address"))
+  if not columns:
+    return
+  db.execute(text("""
+    UPDATE ilgforms_section_links SET post_code = COALESCE(:pc, post_code), address = COALESCE(:ad, address)
+    WHERE account_id = :a AND section_slug = :s AND datasource = :ds
+  """), {"pc": columns.get("postCode"), "ad": columns.get("address"), "a": account_id, "s": section["slug"],
+         "ds": integ["incident"]})
+  # Show them on the platform's incident list too, without touching anything a user typed there.
+  db.execute(text("""
+    UPDATE sections SET address = CASE WHEN COALESCE(address, '') = '' THEN COALESCE(:ad, address) ELSE address END,
+                        detail = CASE WHEN COALESCE(detail, '') = '' THEN COALESCE(:pc, detail) ELSE detail END
+    WHERE account_id = :a AND slug = :s
+  """), {"pc": columns.get("postCode"), "ad": columns.get("address"), "a": account_id, "s": section["slug"]})
+  _enqueue(db, integ, account_id, kind=JOB_UPDATE_ROW, datasource=integ["incident"],
+           payload={"row_id": link[0], "columns": columns}, direction="updated", event="incident.update",
+           summary=f"Incident {section['label']}: {' and '.join('post code' if c == 'postCode' else 'address' for c in columns)} "
+                   f"taken from {_what(item)}, queued for {integ['incident']}",
+           section=section, row_id=link[0])
 
 
 def item_created(account_id: str, slug: str, item: dict):
@@ -247,6 +283,7 @@ def item_created(account_id: str, slug: str, item: dict):
     section = _section(db, account_id, slug)
     appliance = is_appliance(item.get("data"))
     what = _what(item)
+    _fill_incident_location(db, integ, account_id, section, item)
     if _house_has_property_row(db, schema, slug, item, integ["main"]):
       if not appliance:
         _log(db, integration_id=integ["id"], account_id=account_id, direction="sent", event="item.insert",
@@ -284,6 +321,7 @@ def item_updated(account_id: str, item: dict):
     section = _section(db, account_id, item.get("section_slug") or "")
     links = _links(db, schema, item["id"])
     what = _what(item)
+    _fill_incident_location(db, integ, account_id, section, item)
 
     for datasource, row_id in links.items():
       if datasource == integ["device"]:
