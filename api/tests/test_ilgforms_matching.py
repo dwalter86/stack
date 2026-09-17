@@ -117,6 +117,14 @@ class FieldTests(unittest.TestCase):
     _, data = m.item_fields(loc(initialVisit="No Faults"), existing_data={"status": "Out"}, now_iso="NOW")
     self.assertEqual(data["status"], "No Faults")
 
+  def test_incident_form_never_puts_faults_back_on_an_item_that_has_an_appliance(self):
+    # status is blank because the appliance's repair status is blank: that is not "unset".
+    _, data = m.item_fields(loc(initialVisit="Faults"), existing_data={"status": "", "itemMake": "SteelSeries"}, now_iso="NOW")
+    self.assertNotIn("status", data)
+    # a bare property with a blank status still takes the first-visit outcome
+    _, data = m.item_fields(loc(initialVisit="Faults"), existing_data={"status": ""}, now_iso="NOW")
+    self.assertEqual(data["status"], "Faults")
+
   def test_update_does_not_blank_existing_values(self):
     _, data = m.item_fields(loc(email="", telephoneNumber2=""), existing_data={"email": "a@b.c"}, now_iso="NOW")
     self.assertNotIn("email", data)

@@ -88,6 +88,16 @@ class DeviceFieldTests(unittest.TestCase):
     _, data = m.device_item_fields(dev(model="", photo=""), BASE, provider_id=1, entry_ref="g", existing=True)
     self.assertNotIn("itemModel", data); self.assertNotIn("itemPhoto", data); self.assertIn("itemMake", data)
 
+  def test_blank_repair_status_replaces_faults_when_the_appliance_joins_a_property(self):
+    _, data = m.device_item_fields(dev(repairStatus=""), BASE, provider_id=1, entry_ref="g", existing=True, joins_property=True)
+    self.assertEqual(data["status"], "")
+    _, data = m.device_item_fields(dev(repairStatus="In Progress"), BASE, provider_id=1, entry_ref="g", existing=True, joins_property=True)
+    self.assertEqual(data["status"], "In Progress")
+
+  def test_blank_repair_status_never_wipes_a_status_on_a_normal_update(self):
+    _, data = m.device_item_fields(dev(repairStatus=""), BASE, provider_id=1, entry_ref="g", existing=True)
+    self.assertNotIn("status", data)
+
   def test_full_photo_url_is_kept(self):
     self.assertEqual(m.photo_url("https://x/y.jpg", 1, "g"), "https://x/y.jpg")
 

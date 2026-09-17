@@ -200,7 +200,10 @@ def item_fields(location: dict, *, existing_data: dict | None, now_iso: str) -> 
 
   data = {key: value for key, value in values.items() if value}
   current_status = norm(existing_data.get("status"))
-  if status and current_status in INITIAL_VISIT_STATUSES and norm(status) != current_status:
+  # Once an item carries an appliance, its status is the REPAIR status and belongs to the appliance
+  # forms (it may legitimately be blank). The first-visit outcome lives on in the property sheet.
+  if (status and not has_appliance_details(existing_data)
+      and current_status in INITIAL_VISIT_STATUSES and norm(status) != current_status):
     data["status"] = status
   return (name or None), data
 
@@ -298,6 +301,7 @@ def plan_devices(devices: list, base: dict, section_items: list, links: dict | N
         item_postcode = norm_postcode(data.get("postcode"))
         if norm(data.get("houseNo")) == house and (not post_key or not item_postcode or item_postcode == post_key):
           chosen, reason = item_id, "Added to the existing property item for this house"
+          plan["joins_property"] = True
           break
     if chosen:
       claimed.add(chosen)
@@ -308,10 +312,12 @@ def plan_devices(devices: list, base: dict, section_items: list, links: dict | N
   return plans
 
 
-def device_item_fields(device: dict, base: dict, *, provider_id, entry_ref: str, existing: bool) -> tuple[str | None, dict]:
+def device_item_fields(device: dict, base: dict, *, provider_id, entry_ref: str, existing: bool,
+                       joins_property: bool = False) -> tuple[str | None, dict]:
   """(name, data) for an appliance. For an existing item only non-empty values
   are sent, so a blank on the form never wipes what Stack holds. The engineer's
-  form is the authority on repair status, so that is applied whenever it is set."""
+  form is the authority on repair status, so that is applied whenever it is set. The one
+  time a blank status IS applied is when the appliance joins a bare property item."""
   def clean(value) -> str:
     return str(value if value is not None else "").strip()
   address = join_lines(base.get("address"))
@@ -340,7 +346,12 @@ def device_item_fields(device: dict, base: dict, *, provider_id, entry_ref: str,
   name = clean(base.get("customersName")) or clean(device.get("customerName"))
   if not existing:
     return name, values
-  return (name or None), {k: v for k, v in values.items() if v}
+  data = {k: v for k, v in values.items() if v}
+  if joins_property:
+    # Until now this item was a bare property and its status held the first-visit outcome ("Faults").
+    # From here on status means repair status, so it takes the appliance's value even when that is blank.
+    data["status"] = values["status"]
+  return (name or None), data
 
 
 def engineer_item_fields(review: dict, *, provider_id, entry_ref: str) -> tuple[str | None, dict]:

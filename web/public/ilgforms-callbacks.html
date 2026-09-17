@@ -59,7 +59,7 @@
           <tr><td><code>uniq_up</code>, or <code>uniq</code> when it is not <code>0</code></td><td>The datasource row id. The item id is written back to this row.</td></tr>
           <tr><td><code>itemId</code></td><td>If set, that item is updated. If blank, an existing matching item is linked, otherwise a new item is created.</td></tr>
           <tr><td><code>customersName</code>, <code>houseNo</code>, <code>streetName</code>, <code>postCodeIn</code> / <code>postCodeOut</code>, <code>telephoneNumber1</code>, <code>telephoneNumber2</code>, <code>email</code></td><td>Item name and details. A blank value never wipes an existing one.</td></tr>
-          <tr><td><code>initialVisit</code></td><td>Item status. Only applied while the item is still at Faults, No Faults, Out or N/A, so an engineer's later status is never overwritten.</td></tr>
+          <tr><td><code>initialVisit</code></td><td>Item status, the outcome of the first visit. Only applied while the item is a property with no appliance on it and is still at Faults, No Faults, Out or N/A. Once an appliance is on the item, its status is the appliance's repair status and this field no longer touches it.</td></tr>
         </tbody>
       </table></div>
 <pre class="doc-pre">{

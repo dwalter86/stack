@@ -150,7 +150,8 @@ def process_devices(integration: dict, body: dict) -> dict:
             changed = []
           else:
             item_id = plan["item_id"]
-            name, data = matching.device_item_fields(device, page1, provider_id=provider_id, entry_ref=entry_ref, existing=True)
+            name, data = matching.device_item_fields(device, page1, provider_id=provider_id, entry_ref=entry_ref,
+                                                     existing=True, joins_property=bool(plan.get("joins_property")))
             changed = _apply_update(db, schema, item_id, name, data)
           outcome["item_id"] = item_id
 
