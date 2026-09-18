@@ -94,8 +94,11 @@ def is_possible_match(item: dict, location: dict) -> bool:
   street_matches = _street_matches(data.get("address"), location.get("streetName") or location.get("addressOut"))
   name_matches = bool(item_name) and bool(loc_name) and (item_name in loc_name or loc_name in item_name)
   phone_matches = bool(item_phone) and item_phone == loc_phone
+  # A location with neither a name nor a phone (a flat nobody answered) has nothing more to offer:
+  # house + post code + street is then the whole identity.
+  nothing_to_compare = not loc_name and not loc_phone
 
-  return house_matches and postcode_matches and street_matches and (name_matches or phone_matches)
+  return house_matches and postcode_matches and street_matches and (name_matches or phone_matches or nothing_to_compare)
 
 
 def plan_locations(locations: list, section_items: list, links: dict | None = None,
@@ -137,6 +140,17 @@ def plan_locations(locations: list, section_items: list, links: dict | None = No
       else:
         plan.update(action=ACTION_SKIP, item_id=sheet_item_id,
                     reason="Sheet itemId does not exist in Stack (orphan row left as is)")
+      plans.append(plan)
+      continue
+
+    # The item already tied to this sheet row wins outright: a resubmission (the office edits the
+    # incident form many times a day, and the app's copy may still show a blank itemId) must land
+    # on the item it created before, whatever the fuzzy match thinks.
+    already = next((str(it["id"]).lower() for it in section_items
+                    if row_id and links.get(str(it["id"]).lower()) == row_id), None)
+    if already:
+      claimed.add(already)
+      plan.update(action=ACTION_LINK, item_id=already, candidates=1, reason="Same sheet row as before (re-delivery)")
       plans.append(plan)
       continue
 

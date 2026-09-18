@@ -90,6 +90,29 @@ class PlanTests(unittest.TestCase):
     plan = m.plan_locations([loc()], items, links={"mine": "EFGH-01012026-101004-00000002"})[0]
     self.assertEqual(plan["item_id"], "mine")
 
+  def test_nameless_flat_is_relinked_on_every_resubmission(self):
+    # Production, 18 Sep: "Flat 1" with no name and no phone was created six times, once per
+    # resubmission, because nothing could tie the location back to its item. The row link can.
+    flat = loc(customersName="", telephoneNumber1="", houseNo="Flat 1", uniq_up="BXJK-18092026-105916-86273372")
+    created = item("first", name="", houseNo="Flat 1", telephone="")
+    plan = m.plan_locations([flat], [created], links={"first": "BXJK-18092026-105916-86273372"})[0]
+    self.assertEqual((plan["action"], plan["item_id"]), (m.ACTION_LINK, "first"))
+
+  def test_nameless_flat_matches_an_existing_item_by_house_and_postcode(self):
+    flat = loc(customersName="", telephoneNumber1="", houseNo="Flat 1")
+    existing = item("appl", name="", houseNo="Flat 1", telephone="", itemMake="Kettle")
+    self.assertEqual(m.plan_locations([flat], [existing])[0]["action"], m.ACTION_LINK)
+
+  def test_nameless_flat_does_not_match_a_different_flat(self):
+    flat = loc(customersName="", telephoneNumber1="", houseNo="Flat 1")
+    self.assertEqual(m.plan_locations([flat], [item("x", houseNo="Flat 3")])[0]["action"], m.ACTION_CREATE)
+
+  def test_row_link_beats_the_fuzzy_match(self):
+    # two items look alike; the one tied to this row is the one to reuse
+    a, b = item("a", created="2026-01-01"), item("b", created="2026-01-02")
+    plan = m.plan_locations([loc()], [a, b], links={"b": "EFGH-01012026-101004-00000002"})[0]
+    self.assertEqual(plan["item_id"], "b")
+
   def test_row_id_falls_back_from_zero_uniq(self):
     self.assertEqual(m.row_id_for({"uniq": "0", "uniq_up": "7UWM-1"}), "7UWM-1")
     self.assertEqual(m.row_id_for({"uniq": "0", "uniq_up": ""}), "")
