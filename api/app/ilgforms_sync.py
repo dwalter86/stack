@@ -20,6 +20,9 @@ import rls
 from database import SessionLocal
 
 JOB_WRITE_ITEM_ID = "write_item_id"
+# A form submission writes its own rows into the datasource at the moment it calls us. Writing back
+# straight away collides with that ("Data Source is currently being updated"), so wait a little.
+WRITEBACK_DELAY_SECONDS = 20
 REDACTED = "[redacted]"
 
 # Fallback layout for a new incident, used only when the account has no incident to
@@ -405,10 +408,10 @@ def process_incident(integration: dict, body: dict) -> dict:
                               section_slug=slug, section_label=label, item_id=item_id, row_id=row_id,
                               entry_id=entry_id, summary=f"{what}: itemId queued for {integration['main_datasource']}")
               db.execute(text("""
-                INSERT INTO ilgforms_jobs (integration_id, account_id, kind, item_id, section_slug, datasource, payload, log_id)
-                VALUES (:i, :a, :kind, :item, :slug, :ds, CAST(:p AS jsonb), :log)
+                INSERT INTO ilgforms_jobs (integration_id, account_id, kind, item_id, section_slug, datasource, payload, log_id, next_attempt_at)
+                VALUES (:i, :a, :kind, :item, :slug, :ds, CAST(:p AS jsonb), :log, now() + make_interval(secs => :delay))
               """), {"i": integration["id"], "a": account_id, "kind": JOB_WRITE_ITEM_ID, "item": item_id,
-                     "slug": slug, "ds": integration["main_datasource"],
+                     "slug": slug, "ds": integration["main_datasource"], "delay": WRITEBACK_DELAY_SECONDS,
                      "log": sent_log, "p": json.dumps({
                        "external_id": integration["main_datasource"], "row_id": row_id,
                        "column": integration["item_id_column"], "value": item_id})})

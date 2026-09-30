@@ -232,18 +232,82 @@ def run_job(job: dict, integration: dict, transport=None) -> str:
                 error=None, retry_in=None)
     return "done"
   except IlgFormsRetryable as exc:
-    if job["attempts"] >= MAX_ATTEMPTS:
-      _finish_job(job, status="failed", log_result="failed", note=attempt + " gave up",
-                  error=str(exc)[:2000], retry_in=None)
-      return "failed"
-    wait = BACKOFF_SECONDS[min(job["attempts"] - 1, len(BACKOFF_SECONDS) - 1)]
-    _finish_job(job, status="pending", log_result="retrying", note=attempt + f" will retry in {wait}s",
-                error=str(exc)[:2000], retry_in=wait)
-    return "retry"
+    return _retry_or_fail(job, exc)
   except Exception as exc:  # noqa: BLE001 - rejected by ILG Forms, or a bug: do not loop on it
     _finish_job(job, status="failed", log_result="failed", note=attempt + " rejected",
                 error=str(exc)[:2000], retry_in=None)
     return "failed"
+
+
+CELL_UPDATE_KINDS = (JOB_WRITE_ITEM_ID, JOB_UPDATE_ROW)
+BATCH_MAX = 50
+
+
+def _job_datasource(job: dict) -> str:
+  return job.get("datasource") or (job.get("payload") or {}).get("external_id")
+
+
+def claim_batch_mates(first: dict, limit: int) -> list[dict]:
+  """Other due cell-update jobs for the same datasource, to send in the same call. A job never
+  jumps ahead of an earlier insert or delete on that datasource (its row may not exist yet)."""
+  if limit <= 0:
+    return []
+  with SessionLocal() as db:
+    rows = db.execute(text("""
+      UPDATE ilgforms_jobs SET status = 'running', attempts = attempts + 1, next_attempt_at = now()
+      WHERE id IN (
+        SELECT j.id FROM ilgforms_jobs j
+        WHERE j.status = 'pending' AND j.next_attempt_at <= now() AND j.integration_id = :i
+          AND j.kind = ANY(:kinds) AND COALESCE(j.datasource, j.payload->>'external_id') = :ds
+          AND NOT EXISTS (
+            SELECT 1 FROM ilgforms_jobs o
+            WHERE o.status IN ('pending', 'running') AND o.kind <> ALL(:kinds) AND o.created_at < j.created_at
+              AND COALESCE(o.datasource, o.payload->>'external_id') = :ds)
+        ORDER BY j.created_at LIMIT :limit FOR UPDATE OF j SKIP LOCKED
+      )
+      RETURNING id::text, integration_id::text, account_id::text, kind, item_id::text, payload, attempts, log_id::text, datasource, created_at
+    """), {"i": first["integration_id"], "kinds": list(CELL_UPDATE_KINDS), "ds": _job_datasource(first), "limit": limit}).all()
+    db.commit()
+  rows = sorted(rows, key=lambda r: r[9])
+  return [{"id": r[0], "integration_id": r[1], "account_id": r[2], "kind": r[3], "item_id": r[4],
+           "payload": r[5] if isinstance(r[5], dict) else json.loads(r[5]), "attempts": r[6], "log_id": r[7],
+           "datasource": r[8]} for r in rows]
+
+
+def _retry_or_fail(job: dict, exc: Exception) -> str:
+  attempt = f" [attempt {job['attempts']}/{MAX_ATTEMPTS}]"
+  if job["attempts"] >= MAX_ATTEMPTS:
+    _finish_job(job, status="failed", log_result="failed", note=attempt + " gave up", error=str(exc)[:2000], retry_in=None)
+    return "failed"
+  wait = BACKOFF_SECONDS[min(job["attempts"] - 1, len(BACKOFF_SECONDS) - 1)]
+  _finish_job(job, status="pending", log_result="retrying", note=attempt + f" will retry in {wait}s",
+              error=str(exc)[:2000], retry_in=wait)
+  return "retry"
+
+
+def run_cell_batch(batch: list[dict], integration: dict, transport=None) -> list[str]:
+  """Send every cell update for one datasource in a single call. If ILG Forms rejects the call
+  outright (one bad row id fails them all), fall back to one call per job to isolate it."""
+  if len(batch) == 1:
+    return [run_job(batch[0], integration, transport)]
+  datasource = _job_datasource(batch[0])
+  try:
+    with _client(integration, transport) as client:
+      headers = _headers(client, integration["id"], datasource)
+      updates = []
+      for job in batch:
+        payload = job["payload"]
+        columns = {payload["column"]: payload["value"]} if job["kind"] == JOB_WRITE_ITEM_ID else payload["columns"]
+        updates.append((payload["row_id"], {k: v for k, v in columns.items() if k in headers}))
+      client.update_rows(datasource, updates)
+    for job in batch:
+      _finish_job(job, status="done", log_result="success", error=None, retry_in=None,
+                  note=f" [attempt {job['attempts']}/{MAX_ATTEMPTS}]")
+    return ["done"] * len(batch)
+  except IlgFormsRetryable as exc:
+    return [_retry_or_fail(job, exc) for job in batch]
+  except Exception:  # noqa: BLE001 - find the culprit by sending them one at a time
+    return [run_job(job, integration, transport) for job in batch]
 
 
 def run_due_jobs(limit: int = 25, transport=None) -> dict:
@@ -270,10 +334,15 @@ def run_due_jobs(limit: int = 25, transport=None) -> dict:
                   error="Integration no longer exists", retry_in=None)
       totals["failed"] += 1
       continue
-    outcome = run_job(job, integration, transport)
-    totals[outcome] += 1
-    if outcome == "done":
-      touched.add(job["integration_id"])
+    if job["kind"] in CELL_UPDATE_KINDS:
+      batch = [job] + claim_batch_mates(job, BATCH_MAX - 1)
+      outcomes = run_cell_batch(batch, integration, transport)
+    else:
+      outcomes = [run_job(job, integration, transport)]
+    for outcome in outcomes:
+      totals[outcome] += 1
+      if outcome == "done":
+        touched.add(job["integration_id"])
   for integration_id in touched:
     try:
       reconcile(integration_id, transport=transport)

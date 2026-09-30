@@ -23,7 +23,8 @@ class FakeIlgForms:
     self.key, self.max_page = key, max_page
     self.sheets = {name: [] for name in LAYOUTS}
     self.calls = []
-    self.fail_next = 0   # answer the next N writes with the datasource lock error
+    self.fail_next = 0   # answer the next N writes with the datasource lock error (500)
+    self.busy_next = 0   # answer the next N writes with the "being updated" error (400)
 
   def transport(self):
     return httpx.MockTransport(self.handle)
@@ -51,11 +52,15 @@ class FakeIlgForms:
     if self.fail_next:
       self.fail_next -= 1
       return httpx.Response(500, text='{"ResponseStatus":{"ErrorCode":"CacheLockException","Message":"Missing or expired lock"}}')
+    if self.busy_next:
+      self.busy_next -= 1
+      return httpx.Response(400, text='{"ResponseStatus":{"ErrorCode":"ArgumentException","Message":"Data Source is currently being updated - you cannot update in parallel","Errors":[]}}')
     name = body["ExternalId"]; data = self.sheets[name]; width = len(LAYOUTS[name])
     for update in body.get("RowColumnUpdates") or []:
-      target = [r for r in data if r[0] == update["RowId"]]
-      if not target:
+      if not [r for r in data if r[0] == update["RowId"]]:
         return httpx.Response(400, text='{"ResponseStatus":{"ErrorCode":"Predicate","Message":"No Rows Found"}}')
+    for update in body.get("RowColumnUpdates") or []:
+      target = [r for r in data if r[0] == update["RowId"]]
       for col in update["ColumnUpdates"]:
         target[0][LAYOUTS[name].index(col["Column"])] = col["Value"]
     for row in body.get("NewRows") or []:

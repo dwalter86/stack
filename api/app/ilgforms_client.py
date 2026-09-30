@@ -18,6 +18,7 @@ import httpx
 BASE_URL = os.environ.get("ILGFORMS_BASE_URL", "https://www.ilgforms.com/api/v2")
 DEFAULT_PAGE_SIZE = 1250   # the API's maximum
 MAX_PAGES = 80             # 100,000 rows
+BUSY_MARKERS = ("currently being updated", "cannot update in parallel", "CacheLockException", "expired lock")
 
 
 class IlgFormsError(Exception):
@@ -52,6 +53,11 @@ class IlgFormsClient:
     if response.status_code >= 500:
       raise IlgFormsRetryable(f"ILG Forms {response.status_code}: {response.text[:500]}")
     if response.status_code >= 400:
+      # ILG Forms reports a busy datasource two ways: 500 CacheLockException and this 400. A form
+      # submission writes its own rows at the moment it calls us, so our writeback often lands
+      # while the sheet is still being updated. Both mean "try again shortly", not "rejected".
+      if any(marker in response.text for marker in BUSY_MARKERS):
+        raise IlgFormsRetryable(f"ILG Forms is busy updating this datasource ({response.status_code}): {response.text[:300]}")
       raise IlgFormsError(f"ILG Forms {response.status_code}: {response.text[:500]}")
     if not response.content:
       return {}
@@ -111,6 +117,23 @@ class IlgFormsClient:
       raise IlgFormsError("Cannot delete datasource rows without row ids")
     return self._send("PUT", json={"ExternalId": external_id, "DeletedRows": [[r] for r in row_ids],
                                    "CompanyId": self.company_id, "IntegrationKey": self.integration_key})
+
+  def update_rows(self, external_id: str, updates: list[tuple[str, dict]]) -> dict:
+    """Set cells on several rows in ONE call: [(row_id, {column: value}), ...]. One call per burst
+    instead of one per row keeps us from colliding with our own previous write."""
+    merged: dict[str, dict] = {}
+    for row_id, columns in updates:
+      if not row_id:
+        raise IlgFormsError("Cannot update a datasource row without a RowId")
+      merged.setdefault(row_id, {}).update(columns)   # later edits to the same row win
+    return self._send("PUT", json={
+      "ExternalId": external_id,
+      "RowColumnUpdates": [{"RowId": row_id, "ColumnUpdates": [
+        {"Column": column, "Value": "" if value is None else str(value)} for column, value in columns.items()]}
+        for row_id, columns in merged.items()],
+      "CompanyId": self.company_id,
+      "IntegrationKey": self.integration_key,
+    })
 
   def update_cells(self, external_id: str, row_id: str, columns: dict) -> dict:
     """Set one or more columns on a single datasource row."""

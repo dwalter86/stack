@@ -14,7 +14,8 @@ import ilgforms_matching as matching
 import rls
 from database import SessionLocal
 from ilgforms_outbound import JOB_UPDATE_ROW
-from ilgforms_sync import BadSubmission, IntegrationAuthError, _log, body_hash, redact_payload
+from ilgforms_sync import (BadSubmission, IntegrationAuthError, WRITEBACK_DELAY_SECONDS, _log, body_hash,
+                           redact_payload, resolve_section_schema)
 
 
 def _entry_parts(body: dict):
@@ -105,9 +106,25 @@ def process_devices(integration: dict, body: dict) -> dict:
     db.execute(rls.set_current_account(account_id))
     section = db.execute(text("SELECT label FROM sections WHERE account_id = :a AND slug = :s"),
                          {"a": account_id, "s": slug}).first()
+    section_created = False
     if not section:
-      raise BadSubmission(f"Incident {slug} does not exist in that account")
-    label = section[0] or label
+      # The appliance form and the incident form are often delivered in the same second, and this one
+      # can win the race. Create the incident from what this form carries; the incident form then
+      # finds it already there. (Rejecting made ILG Forms resend a minute later and logged a failure.)
+      db.execute(text("""
+        INSERT INTO sections(account_id, slug, label, detail, schema, address)
+        VALUES (:a, :slug, :label, :detail, CAST(:schema AS jsonb), :address)
+        ON CONFLICT (account_id, slug) DO NOTHING
+      """), {"a": account_id, "slug": slug, "label": label, "detail": str(page1.get("postCode") or "").strip(),
+             "address": matching.join_lines(page1.get("address")),
+             "schema": json.dumps(resolve_section_schema(db, account_id, integration.get("section_schema")))})
+      db.execute(text("""
+        INSERT INTO ilgforms_section_links (account_id, section_slug, datasource, row_id, status, last_checked_at)
+        VALUES (:a, :s, :ds, :s, 'pending', now()) ON CONFLICT DO NOTHING
+      """), {"a": account_id, "s": slug, "ds": integration["incident_datasource"]})
+      section_created = True
+    else:
+      label = section[0] or label
 
     section_items = [
       {"id": r[0], "name": r[1], "data": r[2] if isinstance(r[2], dict) else {}, "created_at": r[3].isoformat()}
@@ -184,12 +201,18 @@ def process_devices(integration: dict, body: dict) -> dict:
                             section_label=label, item_id=item_id, row_id=row_id, entry_id=entry_id,
                             summary=f"{what}: item id queued for {datasource}")
             db.execute(text("""
+              UPDATE ilgforms_sync_log SET result = 'skipped', summary = COALESCE(summary, '') || ' (superseded by a newer submission)'
+              WHERE id <> :me AND id IN (SELECT log_id FROM ilgforms_jobs
+                           WHERE item_id = :item AND datasource = :ds AND kind = :k AND status = 'pending')
+            """), {"item": item_id, "ds": datasource, "k": JOB_UPDATE_ROW, "me": sent_log})
+            db.execute(text("""
               DELETE FROM ilgforms_jobs WHERE item_id = :item AND datasource = :ds AND kind = :k AND status = 'pending'
             """), {"item": item_id, "ds": datasource, "k": JOB_UPDATE_ROW})
             db.execute(text("""
-              INSERT INTO ilgforms_jobs (integration_id, account_id, kind, item_id, section_slug, datasource, payload, log_id)
-              VALUES (:i, :a, :k, :item, :slug, :ds, CAST(:p AS jsonb), :log)
+              INSERT INTO ilgforms_jobs (integration_id, account_id, kind, item_id, section_slug, datasource, payload, log_id, next_attempt_at)
+              VALUES (:i, :a, :k, :item, :slug, :ds, CAST(:p AS jsonb), :log, now() + make_interval(secs => :delay))
             """), {"i": integration["id"], "a": account_id, "k": JOB_UPDATE_ROW, "item": item_id, "slug": slug,
+                   "delay": WRITEBACK_DELAY_SECONDS,
                    "ds": datasource, "log": sent_log, "p": json.dumps({
                      "external_id": datasource, "row_id": row_id,
                      "columns": {"systemID": item_id, "systemAccountID": account_id, "systemSectionID": slug}})})
@@ -203,7 +226,7 @@ def process_devices(integration: dict, body: dict) -> dict:
              event="device.failed", result="failed", parent_id=parent_id, section_slug=slug, section_label=label,
              row_id=row_id, entry_id=entry_id, summary=f"{what}: could not be processed", error=str(exc)[:2000])
 
-    summary = f"{label}: {len(devices)} appliance{'s' if len(devices) != 1 else ''} - " + \
+    summary = f"{label}: {len(devices)} appliance{'s' if len(devices) != 1 else ''}{' (new incident)' if section_created else ''} - " + \
       (", ".join(f"{v} {k}" for k, v in counts.items() if v) or "nothing to do")
     db.execute(text("UPDATE ilgforms_sync_log SET summary = :s, result = :r WHERE id = :id"),
                {"s": summary, "r": "failed" if devices and counts["failed"] == len(devices) else "success", "id": parent_id})

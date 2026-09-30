@@ -48,6 +48,22 @@ class ClientTests(unittest.TestCase):
     with self.assertRaises(IlgFormsRetryable):
       self.client(handler).update_cells("nfmain", "ROW-1", {"itemId": "abc"})
 
+  def test_being_updated_400_is_a_lock_and_is_retryable(self):
+    # Production, 29 Sep: 43 writebacks failed on the first attempt because this 400 was treated as a rejection.
+    body = '{"ResponseStatus":{"ErrorCode":"ArgumentException","Message":"Data Source is currently being updated - you cannot update in parallel","Errors":[]}}'
+    with self.assertRaises(IlgFormsRetryable):
+      self.client(lambda request: httpx.Response(400, text=body)).update_cells("nfmain", "ROW-1", {"itemId": "abc"})
+
+  def test_update_rows_sends_several_rows_in_one_call(self):
+    seen = []
+    def handler(request):
+      seen.append(json.loads(request.content)); return httpx.Response(200, json={})
+    self.client(handler).update_rows("nfmain", [("R1", {"itemId": "a"}), ("R2", {"itemId": "b"}), ("R1", {"notes": "n"})])
+    self.assertEqual(len(seen), 1)
+    self.assertEqual(seen[0]["RowColumnUpdates"], [
+      {"RowId": "R1", "ColumnUpdates": [{"Column": "itemId", "Value": "a"}, {"Column": "notes", "Value": "n"}]},
+      {"RowId": "R2", "ColumnUpdates": [{"Column": "itemId", "Value": "b"}]}])
+
   def test_400_is_not_retryable(self):
     handler = lambda request: httpx.Response(400, text="No Rows Found")
     with self.assertRaises(IlgFormsError) as ctx:
