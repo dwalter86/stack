@@ -162,6 +162,8 @@ class ColumnMapTests(unittest.TestCase):
     # a repair status belongs to the device sheet: it must not overwrite the first-visit outcome
     appliance["data"]["status"] = "Repaired"
     self.assertNotIn("initialVisit", out.property_columns(appliance, "acc", sec, for_insert=False, has_appliance=True))
+    # an edit carries the item id too, so it repairs a row whose id writeback was lost
+    self.assertEqual(out.property_columns(appliance, "acc", sec, for_insert=False, has_appliance=True)["itemId"], "i1")
     # a property-only item keeps the old behaviour: its status is the sheet's initialVisit
     prop = {"id": "i2", "name": "P", "data": {"status": "No Faults"}}
     self.assertEqual(out.property_columns(prop, "acc", sec, for_insert=False)["initialVisit"], "No Faults")

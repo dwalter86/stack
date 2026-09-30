@@ -88,13 +88,15 @@ def property_columns(item: dict, account_id: str, section: dict, *, for_insert: 
     "email": _s(data.get("email")), "houseNo": _s(data.get("houseNo")), "postCode": _s(data.get("postcode")),
     "streetName": _s(data.get("address")), "customerName": _s(item.get("name")),
     "teleNo1": _s(data.get("telephone")), "teleNo2": _s(data.get("telephone2")),
+    # Always sent, on edits too: if an earlier id writeback was lost, the next edit repairs the link.
+    "itemId": item["id"],
   }
   # initialVisit is the outcome of the first visit (Faults / No Faults / Out / N/A). For an item that is
   # also an appliance, status is the repair status and belongs to the device sheet, not here.
   if for_insert:
     cols["initialVisit"] = status if (status and is_initial) else ("Faults" if has_appliance else "")
     cols.update({"ID": row_id, "incd": _s(section.get("label")), "incdId": _s(section.get("slug")),
-                 "accountId": account_id, "itemId": item["id"]})
+                 "accountId": account_id})
   elif not has_appliance or (status and is_initial):
     cols["initialVisit"] = status
   return cols
