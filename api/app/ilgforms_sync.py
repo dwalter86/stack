@@ -217,14 +217,16 @@ def log_rejected(*, company_id, reason: str, status: int):
     pass
 
 
-def _retire_pending_writebacks(db, item_id: str, result: str, note: str):
-  """Remove not-yet-run itemId writebacks for an item and close their log rows."""
-  db.execute(text("""
+def _retire_pending_writebacks(db, item_id: str, result: str, note: str, kind: str = JOB_WRITE_ITEM_ID,
+                               datasource: str | None = None):
+  """Remove not-yet-run jobs of one kind for an item and close their log rows."""
+  where = "item_id = :item AND kind = :kind AND status = 'pending'" + (" AND datasource = :ds" if datasource else "")
+  params = {"result": result, "note": note, "item": item_id, "kind": kind, "ds": datasource}
+  db.execute(text(f"""
     UPDATE ilgforms_sync_log SET result = :result, summary = COALESCE(summary, '') || ' (' || :note || ')'
-    WHERE id IN (SELECT log_id FROM ilgforms_jobs WHERE item_id = :item AND kind = :kind AND status = 'pending')
-  """), {"result": result, "note": note, "item": item_id, "kind": JOB_WRITE_ITEM_ID})
-  db.execute(text("DELETE FROM ilgforms_jobs WHERE item_id = :item AND kind = :kind AND status = 'pending'"),
-             {"item": item_id, "kind": JOB_WRITE_ITEM_ID})
+    WHERE id IN (SELECT log_id FROM ilgforms_jobs WHERE {where})
+  """), params)
+  db.execute(text(f"DELETE FROM ilgforms_jobs WHERE {where}"), params)
 
 
 def _describe(location: dict) -> str:
@@ -302,10 +304,15 @@ def process_incident(integration: dict, body: dict) -> dict:
       """), {"s": slug}).all()
     ]
     items_by_id = {item["id"]: item for item in section_items}
+    # A row id that only exists as a not-yet-sent insert (an appliance form just queued a property
+    # row for this house) is not a link yet: the office's form carries the real row, so the item
+    # must stay matchable and the queued insert is cancelled when it is matched.
     links = {r[0]: r[1] for r in db.execute(text(f"""
       SELECT s.item_id::text, s.row_id FROM {schema}.item_sync s
       JOIN {schema}.items i ON i.id = s.item_id
       WHERE i.section_slug = :s AND s.row_id IS NOT NULL AND s.datasource = :ds
+        AND NOT EXISTS (SELECT 1 FROM ilgforms_jobs j WHERE j.item_id = s.item_id AND j.datasource = :ds
+                          AND j.kind = 'insert_row' AND j.status = 'pending')
     """), {"s": slug, "ds": integration["main_datasource"]}).all()}
 
     sheet_ids = {str(l.get("itemId") or "").strip().lower() for l in locations if isinstance(l, dict)} - {""}
@@ -403,6 +410,8 @@ def process_incident(integration: dict, body: dict) -> dict:
           if needs_writeback:
             if can_writeback:
               _retire_pending_writebacks(db, item_id, "skipped", "superseded by a newer submission")
+              _retire_pending_writebacks(db, item_id, "skipped", "the incident form supplied this house's row",
+                                         kind="insert_row", datasource=integration["main_datasource"])
               sent_log = _log(db, integration_id=integration["id"], account_id=account_id, direction="sent",
                               event="itemid.writeback", result="pending", parent_id=parent_id,
                               section_slug=slug, section_label=label, item_id=item_id, row_id=row_id,

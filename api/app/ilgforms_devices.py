@@ -13,6 +13,7 @@ from sqlalchemy import text
 import ilgforms_matching as matching
 import rls
 from database import SessionLocal
+import ilgforms_outbound as outbound
 from ilgforms_outbound import JOB_UPDATE_ROW
 from ilgforms_sync import (BadSubmission, IntegrationAuthError, WRITEBACK_DELAY_SECONDS, _log, body_hash,
                            redact_payload, resolve_section_schema)
@@ -70,6 +71,39 @@ def _set_link(db, schema: str, item_id: str, datasource: str, row_id: str | None
       status = EXCLUDED.status, last_checked_at = now(),
       last_synced_at = COALESCE(EXCLUDED.last_synced_at, {schema}.item_sync.last_synced_at), last_error = NULL
   """), {"i": item_id, "ds": datasource, "row": row_id or None, "st": status})
+
+
+def _ensure_property_row(db, integration, account_id, schema, slug, label, item_id, name, data, houses_done, parent_id, entry_id):
+  """Queue a property-sheet row for this item's house unless the house already has one (an item in
+  this incident linked to the main sheet, or one queued earlier in this submission). The runner
+  still checks the sheet itself before inserting, so a blank row the office wrote is reused."""
+  house = matching.norm(data.get("houseNo"))
+  if not house or house in houses_done:
+    return
+  houses_done.add(house)
+  main_ds = integration["main_datasource"]
+  for (other,) in db.execute(text(f"""
+    SELECT COALESCE(i.data, '{{}}'::jsonb) FROM {schema}.items i
+    JOIN {schema}.item_sync s ON s.item_id = i.id AND s.datasource = :ds AND s.row_id IS NOT NULL
+    WHERE i.section_slug = :slug AND i.id::text <> :me
+  """), {"ds": main_ds, "slug": slug, "me": item_id}).all():
+    if matching.norm((other or {}).get("houseNo")) == house:
+      return
+  integ = {"id": integration["id"], "main": main_ds, "device": integration["device_datasource"],
+           "incident": integration["incident_datasource"], "engineer_emails": {}}
+  section = {"slug": slug, "label": label}
+  item = {"id": item_id, "name": name or "", "data": data}
+  row_id = outbound.new_row_id()
+  outbound._set_link(db, schema, item_id, main_ds, row_id)
+  outbound._enqueue(db, integ, account_id, kind=outbound.JOB_INSERT_ROW, datasource=main_ds,
+                    payload={"values": outbound.property_columns(item, account_id, section, for_insert=True, row_id=row_id, has_appliance=True),
+                             "reuse": {"incident_column": "incdId", "incident": slug, "house_column": "houseNo",
+                                       "house": str(data.get("houseNo") or "").strip(), "item_column": "itemId", "item_id": item_id}},
+                    summary=f"House {str(data.get('houseNo') or '').strip()} ({name or 'no name'}): no property row yet, new row queued for {main_ds}",
+                    direction="sent", event="item.insert", section=section, item_id=item_id, row_id=row_id)
+  # the parent submission groups it in the log
+  db.execute(text("UPDATE ilgforms_sync_log SET parent_id = :p, entry_id = :e WHERE id = (SELECT log_id FROM ilgforms_jobs WHERE item_id = :i AND datasource = :ds AND kind = :k AND status = 'pending' ORDER BY created_at DESC LIMIT 1)"),
+             {"p": parent_id, "e": entry_id, "i": item_id, "ds": main_ds, "k": outbound.JOB_INSERT_ROW})
 
 
 def process_devices(integration: dict, body: dict) -> dict:
@@ -143,6 +177,7 @@ def process_devices(integration: dict, body: dict) -> dict:
     parent_id = _log(db, integration_id=integration["id"], account_id=account_id, direction="received",
                      event="devices.received", result="success", section_slug=slug, section_label=label,
                      entry_id=entry_id, summary="", payload=redact_payload(body))
+    houses_done: set[str] = set()
 
     for plan in matching.plan_devices(devices, page1, section_items, links=links, known_item_ids=known_ids):
       device, row_id, action = plan["device"], plan["row_id"], plan["action"]
@@ -179,6 +214,13 @@ def process_devices(integration: dict, body: dict) -> dict:
           needs_writeback = action in (matching.ACTION_CREATE, matching.ACTION_LINK)
           _set_link(db, schema, item_id, datasource, row_id,
                     "synced" if action == matching.ACTION_UPDATE else ("pending" if row_id else "not_synced"))
+
+          if action == matching.ACTION_CREATE:
+            # The app lists an incident's properties from the main sheet, which only the office's
+            # incident form writes. An engineer who logs an appliance at a house the office has not
+            # entered would otherwise leave that house invisible in the app: give it a property row.
+            _ensure_property_row(db, integration, account_id, schema, slug, label, item_id, name, data,
+                                 houses_done, parent_id, entry_id)
 
           if action == matching.ACTION_CREATE:
             counts["created"] += 1
