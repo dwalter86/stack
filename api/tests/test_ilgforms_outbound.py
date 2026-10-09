@@ -148,6 +148,8 @@ class ColumnMapTests(unittest.TestCase):
     self.assertEqual((cols["uniq"], cols["systemID"], cols["systemSectionID"], cols["incidNo"]), ("i1", "i1", "S1", "Street"))
     self.assertEqual((cols["ApproxPrice"], cols["eEmail"], cols["Repair Status"], cols["Status"]), ("250", "carl@example.com", "Repaired", "Repaired on Site"))
     self.assertNotIn("uniq", out.device_columns(item, "acc", {}, {}, for_insert=False))
+    # an edit re-asserts the incident name (the app lists appliances by it; engineers mistype it)
+    self.assertEqual(out.device_columns(item, "acc", {"slug": "S1", "label": "Street"}, {}, for_insert=False)["incidNo"], "Street")
 
   def test_new_row_id_shape(self):
     import ilgforms_outbound as out

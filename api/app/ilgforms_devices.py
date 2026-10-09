@@ -257,7 +257,10 @@ def process_devices(integration: dict, body: dict) -> dict:
                    "delay": WRITEBACK_DELAY_SECONDS,
                    "ds": datasource, "log": sent_log, "p": json.dumps({
                      "external_id": datasource, "row_id": row_id,
-                     "columns": {"systemID": item_id, "systemAccountID": account_id, "systemSectionID": slug}})})
+                     # incidNo is typed by the engineer and the app lists appliances by it: set it to the
+                     # platform's name for the incident so a typo ("821701" for "821702") cannot hide the row.
+                     "columns": {"systemID": item_id, "systemAccountID": account_id, "systemSectionID": slug,
+                                 "incidNo": label}})})
             outcome["writeback"] = "queued"
           results.append(outcome)
       except Exception as exc:  # noqa: BLE001

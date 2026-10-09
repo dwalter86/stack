@@ -176,6 +176,11 @@ try:
   check("photo link built and comment added once", one["data"].get("itemPhoto", "").endswith("a.jpg") and one["data"]["itemPhoto"].startswith("https://")
         and len(api.get(f"/api/accounts/{ACC}/items/{jj}/comments").json()) == 1)
   check("one id on both sheets", sheet("nfmain", ID=loc["uniq_up"])[0]["itemId"] == jj and sheet("deviceDB", uniq="JJD1-01012026-160100-00000001")[0]["systemID"] == jj)
+  fake.sheets["deviceDB"][:] = [[("E2E Stret typo" if i == 1 else v) for i, v in enumerate(r)] if r[0].startswith("JJD2") else r for r in fake.sheets["deviceDB"]]
+  devices["page1"]["refNo"] = "E2E Stret typo"
+  form("devices", entry(11, devices, DSRowId="01234567-89ab-cdef-0123-456789abcdef")); run()
+  check("an incident name the engineer mistyped on the form is corrected on the appliance row (Stonesdale 821701)",
+        sheet("deviceDB", uniq="JJD2-01012026-160100-00000001")[0]["incidNo"] == "E2E Street", sheet("deviceDB", uniq="JJD2-01012026-160100-00000001")[0]["incidNo"])
   ids = []
   for n in range(3, 7):   # the office edits the incident form all day; the app's itemId column lags behind
     loc["notes"] = f"edit {n}"

@@ -72,10 +72,12 @@ def device_columns(item: dict, account_id: str, section: dict, engineer_emails: 
     "Repair Status": _s(data.get("status")), "Name": _s(item.get("name")),
     "Contact Number": _s(data.get("telephone")), "address": _s(data.get("address")),
     "systemID": item["id"],
+    # the app lists appliances by incidNo; always the platform's name for the incident, so an edit
+    # also repairs a name the engineer mistyped on the form
+    "incidNo": _s(section.get("label")),
   }
   if for_insert:
-    cols.update({"uniq": item["id"], "incidNo": _s(section.get("label")), "systemAccountID": account_id,
-                 "systemSectionID": _s(section.get("slug"))})
+    cols.update({"uniq": item["id"], "systemAccountID": account_id, "systemSectionID": _s(section.get("slug"))})
   return cols
 
 
