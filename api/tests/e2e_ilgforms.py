@@ -133,6 +133,11 @@ try:
   check("repair status does not overwrite the property's first-visit outcome", sheet("nfmain", itemId=both["id"])[0]["initialVisit"] == "Faults")
 
   print("3. The sheet already holds rows the platform does not know about")
+  fake.add("deviceDB", uniq="ENG9-01012026-100000-00000001", systemSectionID=SLUG, houseNoName="9", Make="Hoover", ApplianceType="Dryer", systemID="")
+  dryer = api.post(f"/api/accounts/{ACC}/sections/{SLUG}/items", json={"name": "Mr Nine", "data": {"houseNo": "9", "postcode": "TE5 7ST", "itemMake": "Hoover", "itemApplianceType": "Dryer"}}).json()
+  run()
+  d9 = sheet("deviceDB", systemSectionID=SLUG, houseNoName="9")
+  check("appliance the engineer's form already wrote is linked, not duplicated", len(d9) == 1 and d9[0]["uniq"].startswith("ENG9") and d9[0]["systemID"] == dryer["id"], d9)
   fake.add("nfmain", ID="FORM-01012026-100000-00000020", houseNo="20", customerName="From The Form", incdId=SLUG, accountId=ACC, itemId="")
   fake.add("nfmain", ID="FORM-01012026-100000-00000030", houseNo="30", incdId=SLUG, accountId=ACC, itemId="99999999-9999-4999-8999-999999999999")
   h20 = api.post(f"/api/accounts/{ACC}/sections/{SLUG}/items", json={"name": "Web Person", "data": {"houseNo": "20", "postcode": "TE5 7ST"}}).json()

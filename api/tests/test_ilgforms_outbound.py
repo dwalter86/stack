@@ -206,6 +206,14 @@ class PropertyInsertPlanTests(unittest.TestCase):
     rows = [{"ID": "R9", "incdId": "INC1", "houseNo": "12", "itemId": "item-1"}]
     self.assertEqual(self.plan(rows), {"action": "present", "row_id": "R9"})
 
+  def test_appliance_rows_must_also_match_make_and_type(self):
+    reuse = {"incident_column": "systemSectionID", "incident": "INC1", "house_column": "houseNoName", "house": "1",
+             "item_column": "systemID", "item_id": "ITEM-1", "extra": {"Make": "Hoover", "ApplianceType": "Dryer"}}
+    rows = [{"uniq": "D1", "systemSectionID": "INC1", "houseNoName": "1", "Make": "Canon", "ApplianceType": "Printer", "systemID": ""},
+            {"uniq": "D2", "systemSectionID": "INC1", "houseNoName": "1", "Make": "hoover ", "ApplianceType": "Dryer", "systemID": ""}]
+    self.assertEqual(jobs.plan_property_insert(rows, reuse, "uniq"), {"action": "reuse", "row_id": "D2"})
+    self.assertEqual(jobs.plan_property_insert(rows[:1], reuse, "uniq")["action"], "insert")
+
   def test_no_house_number_never_matches(self):
     reuse = dict(self.REUSE, house="")
     self.assertEqual(jobs.plan_property_insert([{"ID": "R1", "incdId": "INC1", "houseNo": "", "itemId": ""}], reuse, "ID")["action"], "insert")

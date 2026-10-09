@@ -117,7 +117,7 @@ def _finish_job(job: dict, *, status: str, log_result: str, note: str, error: st
 
 
 def plan_property_insert(rows: list[dict], reuse: dict, key_column: str) -> dict:
-  """Pure: before adding a property row, look at the sheet for the same incident + house.
+  """Pure: before adding a row, look at the sheet for the same incident + house (+ extra columns).
 
     present -- a row already carries this item's id (a retried insert): nothing to send
     reuse   -- a row exists with a blank item id (the incident form wrote it): put our id on it
@@ -133,6 +133,9 @@ def plan_property_insert(rows: list[dict], reuse: dict, key_column: str) -> dict
   if not house:
     return {"action": "insert"}
   same_house = [r for r in same_incident if matching.norm(r.get(reuse["house_column"])) == house]
+  # Appliance rows also have to agree on what the appliance is (make + type); property rows have no extra.
+  for column, value in (reuse.get("extra") or {}).items():
+    same_house = [r for r in same_house if matching.norm(r.get(column)) == matching.norm(value)]
   blank = [r for r in same_house if not str(r.get(reuse["item_column"]) or "").strip()]
   if blank:
     return {"action": "reuse", "row_id": str(blank[0].get(key_column) or "")}

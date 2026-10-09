@@ -180,6 +180,15 @@ def _set_link(db, schema: str, item_id: str, datasource: str, row_id: str, statu
   """), {"i": item_id, "ds": datasource, "row": row_id, "status": status})
 
 
+def device_reuse(item: dict, slug: str) -> dict:
+  """The engineer's form may already have written this appliance's row with a blank systemID:
+  the runner checks the sheet (same incident, house, make and type) before inserting."""
+  data = item.get("data") or {}
+  return {"incident_column": "systemSectionID", "incident": slug, "house_column": "houseNoName",
+          "house": _s(data.get("houseNo")), "item_column": "systemID", "item_id": item["id"],
+          "extra": {"Make": _s(data.get("itemMake")), "ApplianceType": _s(data.get("itemApplianceType"))}}
+
+
 def _what(item: dict) -> str:
   house = _s((item.get("data") or {}).get("houseNo"))
   name = _s(item.get("name"))
@@ -307,7 +316,8 @@ def item_created(account_id: str, slug: str, item: dict):
     if appliance:
       _set_link(db, schema, item["id"], integ["device"], item["id"])
       _enqueue(db, integ, account_id, kind=JOB_INSERT_ROW, datasource=integ["device"],
-               payload={"values": device_columns(item, account_id, section, integ["engineer_emails"], for_insert=True)},
+               payload={"values": device_columns(item, account_id, section, integ["engineer_emails"], for_insert=True),
+                        "reuse": device_reuse(item, section["slug"])},
                direction="sent", event="item.insert", summary=f"{what}: new appliance row queued for {integ['device']}",
                section=section, item_id=item["id"], row_id=item["id"])
     db.commit()
@@ -346,7 +356,8 @@ def item_updated(account_id: str, item: dict):
     if integ["device"] not in links and is_appliance(item.get("data")):
       _set_link(db, schema, item["id"], integ["device"], item["id"])
       _enqueue(db, integ, account_id, kind=JOB_INSERT_ROW, datasource=integ["device"],
-               payload={"values": device_columns(item, account_id, section, integ["engineer_emails"], for_insert=True)},
+               payload={"values": device_columns(item, account_id, section, integ["engineer_emails"], for_insert=True),
+                        "reuse": device_reuse(item, section["slug"])},
                direction="sent", event="item.insert", summary=f"{what}: new row queued for {integ['device']}",
                section=section, item_id=item["id"], row_id=item["id"])
     elif not links:
